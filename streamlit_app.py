@@ -1,5 +1,46 @@
 import streamlit as st
 import os
+import requests
+
+# --- HacxGPT හි ඇති දෝෂය නිවැරදි කිරීම (Monkey Patching) ---
+original_post = requests.post
+original_request = requests.Session.request
+
+def fix_gemini_headers(url, kwargs):
+    # යවන URL එක Google Gemini එකේ නම් විතරක් මේක වැඩ කරයි
+    if "generativelanguage.googleapis.com" in str(url):
+        headers = kwargs.get("headers", {})
+        auth_header = headers.get("Authorization", headers.get("authorization", ""))
+        
+        # OpenAI විදිහට තියෙන Bearer Token එක Google විදිහට හරවමු
+        if auth_header.startswith("Bearer "):
+            key = auth_header.replace("Bearer ", "")
+            if "Authorization" in headers: del headers["Authorization"]
+            if "authorization" in headers: del headers["authorization"]
+            
+            # Google ඉල්ලන නිවැරදි Header එක සකස් කිරීම
+            headers["x-goog-api-key"] = key
+            kwargs["headers"] = headers
+            
+            # අමතර ආරක්ෂාවට URL එකේ අගටත් Key එක එකතු කිරීම
+            if "?key=" not in str(url):
+                url = f"{url}?key={key}"
+                
+    return url, kwargs
+
+def patched_post(url, **kwargs):
+    url, kwargs = fix_gemini_headers(url, kwargs)
+    return original_post(url, **kwargs)
+
+def patched_request(self, method, url, **kwargs):
+    if str(method).upper() == "POST":
+        url, kwargs = fix_gemini_headers(url, kwargs)
+    return original_request(self, method, url, **kwargs)
+
+# Requests library එක අපේ අලුත් functions වලින් Replace කරනවා (මගදී අල්ලා ගැනීම)
+requests.post = patched_post
+requests.Session.request = patched_request
+# -----------------------------------------------------------
 
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 
@@ -40,25 +81,16 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         try:
             clean_key = api_key.strip()
             
-            # 🔴 මෙතනින් කෙලින්ම Environment Variables වලට Key එක දෙනවා
-            os.environ["GEMINI_API_KEY"] = clean_key
-            os.environ["GOOGLE_API_KEY"] = clean_key
             os.environ["HACX_ACTIVE_PROVIDER"] = provider
             os.environ["HACX_ACTIVE_MODEL"] = model
             
-            Config.ACTIVE_PROVIDER = provider
-            Config.ACTIVE_MODEL = model
-            
-            # 🔴 ප්‍රධාන වෙනස: HacxGPT එන්ජිමේ Key එක ගන්න Function එක Override කරනවා!
-            # මෙතනින් වෙන්නේ එන්ජිම කොතනින් Key එක ඉල්ලුවත්, Encrypt කරපු එක දෙන්නේ නැතුව 
-            # කෙලින්ම අපේ ඔරිජිනල් Clean Key එක ලබා දෙන එකයි.
             Config.get_api_key = lambda *args, **kwargs: clean_key
             
             if hasattr(Config, 'initialize'):
                 try: Config.initialize()
                 except Exception: pass
             
-            # ඔයාට ඕනේ කරපු HacxBrain එන්ජිමම තමයි මේ පාවිච්චි වෙන්නේ!
+            # ඔයාට ඕනේ කරපු HacxBrain එන්ජිමම තමයි මේ පාවිච්චි වෙන්නේ
             brain = HacxBrain(clean_key)
             brain.set_provider(provider, clean_key)
             brain.set_model(model)
