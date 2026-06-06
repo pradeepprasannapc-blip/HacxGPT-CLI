@@ -11,13 +11,10 @@ except ImportError as e:
     st.stop()
 
 st.title("🤖 HacxGPT - Web Interface")
-st.markdown("HacxGPT CLI හි Web සංස්කරණය.")
 
 with st.sidebar:
     st.header("⚙️ Settings")
-    st.markdown("ඔයාගේ API Key එක මෙතනට දෙන්න.")
-    
-    provider = st.selectbox("Select Provider", ["openai", "gemini", "groq"])
+    provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
     model = st.text_input("Model Name", value="gemini-pro" if provider=="gemini" else "gpt-3.5-turbo")
 
@@ -41,9 +38,23 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         full_response = ""
         
         try:
+            # --- දෝෂය මගහැරීම සඳහා යාවත්කාලීන කළ කොටස ---
+            # Terminal එකේදී හැදෙන ෆයිල්ස් වෙබ් එකේ නැති නිසා, 
+            # අපි කෙලින්ම Environment Variables විදිහට දත්ත ලබා දෙනවා.
+            os.environ["HACX_ACTIVE_PROVIDER"] = provider
+            os.environ["HACX_ACTIVE_MODEL"] = model
+            os.environ[f"{provider.upper()}_API_KEY"] = api_key
+            
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
-            os.environ[f"{provider.upper()}_API_KEY"] = api_key
+            
+            # Config එක manual විදිහට initialize කරනවා
+            if hasattr(Config, 'initialize'):
+                try:
+                    Config.initialize()
+                except Exception:
+                    pass
+            # ---------------------------------------------
             
             brain = HacxBrain(api_key)
             brain.set_provider(provider, api_key)
