@@ -38,23 +38,23 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         full_response = ""
         
         try:
-            # --- දෝෂය මගහැරීම සඳහා යාවත්කාලීන කළ කොටස ---
-            # Terminal එකේදී හැදෙන ෆයිල්ස් වෙබ් එකේ නැති නිසා, 
-            # අපි කෙලින්ම Environment Variables විදිහට දත්ත ලබා දෙනවා.
+            # පරිසර විචල්‍යයන් (Environment Variables) සැකසීම
             os.environ["HACX_ACTIVE_PROVIDER"] = provider
             os.environ["HACX_ACTIVE_MODEL"] = model
             os.environ[f"{provider.upper()}_API_KEY"] = api_key
             
+            # Gemini සඳහා විශේෂයෙන් Google API Key නමද සැකසීම
+            if provider == "gemini":
+                os.environ["GOOGLE_API_KEY"] = api_key
+            
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
             
-            # Config එක manual විදිහට initialize කරනවා
             if hasattr(Config, 'initialize'):
                 try:
                     Config.initialize()
                 except Exception:
                     pass
-            # ---------------------------------------------
             
             brain = HacxBrain(api_key)
             brain.set_provider(provider, api_key)
@@ -68,7 +68,8 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             message_placeholder.markdown(full_response)
             
         except Exception as e:
-            st.error(f"❌ දෝෂයක් ඇතිවිය: {e}")
-            full_response = "Error occurred."
+            # Error එක පැහැදිලිව පෙන්වන්න
+            st.error(f"❌ Error: {e}")
+            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය. කරුණාකර API Key එක නිවැරදි දැයි පරීක්ෂා කරන්න."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
