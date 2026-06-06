@@ -4,8 +4,11 @@ import os
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 
 try:
+    # CLI එකේ තියෙන ඔක්කොම Security සහ Config ෆයිල්ස් මෙතනට ගන්නවා
     from hacxgpt.config import Config
     from hacxgpt.core.brain import HacxBrain
+    from hacxgpt.utils.security import Security
+    from dotenv import set_key
 except ImportError as e:
     st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
     st.stop()
@@ -16,8 +19,6 @@ with st.sidebar:
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
-    
-    # 🔴 මෙතන මම අලුත් Gemini Model එක default විදිහට දැම්මා
     model = st.text_input("Model Name", value="gemini-1.5-flash" if provider=="gemini" else "gpt-3.5-turbo")
 
 if "messages" not in st.session_state:
@@ -40,28 +41,32 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         full_response = ""
         
         try:
-            # .strip() මගින් Key එකේ මුල/අග තියෙන හිස්තැන් ස්වයංක්‍රීයව මකා දමයි
             clean_key = api_key.strip()
             
-            os.environ["HACX_ACTIVE_PROVIDER"] = provider
-            os.environ["HACX_ACTIVE_MODEL"] = model
-            os.environ[f"{provider.upper()}_API_KEY"] = clean_key
+            # 🔴 මෙන්න මේ කොටස තමයි කලින් අඩු වෙලා තිබුණේ
+            # ටර්මිනල් එකේ වගේම .env ෆයිල් එකක් හදලා ඒකට Encrypt කරලා Key එක දානවා
+            if not os.path.exists(Config.ENV_FILE):
+                 with open(Config.ENV_FILE, 'w') as f: f.write("")
+                 
+            encrypted_key = Security.encrypt(clean_key)
+            key_var = f"{provider.upper()}_API_KEY"
             
-            if provider == "gemini":
-                os.environ["GOOGLE_API_KEY"] = clean_key
-                # 🔴 HacxGPT මගහැර කෙලින්ම Google Library එකට Key එක දීම
-                import google.generativeai as genai
-                genai.configure(api_key=clean_key)
+            set_key(Config.ENV_FILE, key_var, encrypted_key)
+            set_key(Config.ENV_FILE, "HACX_ACTIVE_PROVIDER", provider)
+            set_key(Config.ENV_FILE, "HACX_ACTIVE_MODEL", model)
             
+            # Config එක Initialize කරාම ඒකෙන් ස්වයංක්‍රීයව Key එක Decrypt කරගන්නවා
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
+            Config.initialize()
             
-            if hasattr(Config, 'initialize'):
-                try: Config.initialize()
-                except Exception: pass
+            # App එකට අවශ්‍ය විදිහටම config එකෙන් නිවැරදි key එක ගන්නවා
+            app_key = Config.get_api_key()
+            if not app_key:
+                app_key = clean_key
             
-            brain = HacxBrain(clean_key)
-            brain.set_provider(provider, clean_key)
+            brain = HacxBrain(app_key)
+            brain.set_provider(provider, app_key)
             brain.set_model(model)
             
             generator = brain.chat(prompt)
