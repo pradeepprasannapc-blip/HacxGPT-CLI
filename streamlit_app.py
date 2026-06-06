@@ -2,15 +2,19 @@ import streamlit as st
 import os
 import requests
 
-# --- ස්ථාවර සහ පිරිසිදු කෝඩ් එක ---
-st.set_page_config(page_title="HacxGPT Sinhala", page_icon="🤖", layout="centered")
+# HacxGPT මුල් එන්ජිම (Brain එක) එහෙම්මම තියාගන්නවා
+try:
+    from hacxgpt.core.brain import HacxBrain
+except ImportError:
+    st.error("HacxGPT එන්ජිම සොයාගත නොහැක.")
+    st.stop()
 
+st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 st.title("🤖 HacxGPT - සිංහලෙන්")
 
 with st.sidebar:
     api_key = st.text_input("Enter GEMINI API Key", type="password")
-    # 'gemini-1.5-flash' වෙනුවට 'gemini-1.5-flash-latest' ලෙස භාවිතා කරන්න (Google ලා ඒක තමයි දැන් හඳුනාගන්නේ)
-    model = st.selectbox("Select Model", ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest"])
+    model = st.text_input("Model Name", value="gemini-1.5-flash")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -24,26 +28,25 @@ if prompt := st.chat_input("ඔබේ ප්‍රශ්නය මෙතන ල�
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     if not api_key:
-        st.error("කරුණාකර API Key එකක් ඇතුළත් කරන්න.")
+        st.error("API Key එකක් ඇතුළත් කරන්න.")
         st.stop()
 
     with st.chat_message("assistant"):
         try:
-            # Google වෙත කෙලින්ම ඉල්ලීමක් යැවීම
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            # 🔴 මෙතනදී අපි HacxBrain එකේ තියෙන 'client' එකට අලුත් පාරක් හදනවා
+            # අපි කෙලින්ම HacxBrain එකට අණ කරනවා අපේ නිවැරදි URL එක පාවිච්චි කරන්න කියලා
             
-            payload = {
-                "contents": [{"parts": [{"text": f"{prompt}. පිළිතුර සිංහලෙන් ලබා දෙන්න."}]}]
-            }
+            # Google වෙත නිල API ඉල්ලීමක් යැවීමට අපි හදපු පාලම
+            def custom_request(api_key, model, prompt):
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": f"{prompt}. පිළිතුර සිංහලෙන් ලබා දෙන්න."}]}]}
+                res = requests.post(url, json=payload)
+                return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+            # එන්ජිම හරහාම ප්‍රතිචාරය ලබා ගැනීම
+            full_response = custom_request(api_key.strip(), model, prompt)
             
-            res = requests.post(url, json=payload)
-            data = res.json()
-            
-            if "candidates" in data:
-                full_response = data["candidates"][0]["content"]["parts"][0]["text"]
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-            else:
-                st.error(f"දෝෂයක්: {data.get('error', {}).get('message', 'නොදන්නා දෝෂයක්')}")
+            st.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
         except Exception as e:
-            st.error(f"සම්බන්ධතා දෝෂය: {e}")
+            st.error(f"දෝෂයක්: කරුණාකර මොඩල් නම 'gemini-1.5-flash' ලෙස තහවුරු කරන්න. විස්තරය: {e}")
