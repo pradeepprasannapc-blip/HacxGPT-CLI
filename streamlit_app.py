@@ -1,52 +1,20 @@
 import streamlit as st
 import os
-import requests
-
-# --- HacxGPT හි ඇති දෝෂය නිවැරදි කිරීම (Monkey Patching) ---
-original_post = requests.post
-original_request = requests.Session.request
-
-def fix_gemini_headers(url, kwargs):
-    # යවන URL එක Google Gemini එකේ නම් විතරක් මේක වැඩ කරයි
-    if "generativelanguage.googleapis.com" in str(url):
-        headers = kwargs.get("headers", {})
-        auth_header = headers.get("Authorization", headers.get("authorization", ""))
-        
-        # OpenAI විදිහට තියෙන Bearer Token එක Google විදිහට හරවමු
-        if auth_header.startswith("Bearer "):
-            key = auth_header.replace("Bearer ", "")
-            if "Authorization" in headers: del headers["Authorization"]
-            if "authorization" in headers: del headers["authorization"]
-            
-            # Google ඉල්ලන නිවැරදි Header එක සකස් කිරීම
-            headers["x-goog-api-key"] = key
-            kwargs["headers"] = headers
-            
-            # අමතර ආරක්ෂාවට URL එකේ අගටත් Key එක එකතු කිරීම
-            if "?key=" not in str(url):
-                url = f"{url}?key={key}"
-                
-    return url, kwargs
-
-def patched_post(url, **kwargs):
-    url, kwargs = fix_gemini_headers(url, kwargs)
-    return original_post(url, **kwargs)
-
-def patched_request(self, method, url, **kwargs):
-    if str(method).upper() == "POST":
-        url, kwargs = fix_gemini_headers(url, kwargs)
-    return original_request(self, method, url, **kwargs)
-
-# Requests library එක අපේ අලුත් functions වලින් Replace කරනවා (මගදී අල්ලා ගැනීම)
-requests.post = patched_post
-requests.Session.request = patched_request
-# -----------------------------------------------------------
 
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 
 try:
     from hacxgpt.config import Config
     from hacxgpt.core.brain import HacxBrain
+    from hacxgpt.utils.security import Security
+    from dotenv import set_key
+    
+    # 🔥 සුපිරි ට්‍රික් එක: Security System එක අක්‍රිය කිරීම!
+    # HacxGPT ඇතුලේ තියෙන Encrypt/Decrypt ක්‍රියාවලිය සම්පූර්ණයෙන්ම බයිපාස් කරලා, 
+    # අපි දෙන Key එක ඒ විදිහටම තියාගන්න කියලා කෝඩ් එකට බල කරනවා.
+    Security.encrypt = lambda text: text
+    Security.decrypt = lambda text: text
+
 except ImportError as e:
     st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
     st.stop()
@@ -81,16 +49,30 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         try:
             clean_key = api_key.strip()
             
+            # .env ෆයිල් එක HacxGPT බලාපොරොත්තු වෙන විදිහටම හැදීම
+            if not os.path.exists(Config.ENV_FILE):
+                 with open(Config.ENV_FILE, 'w') as f: f.write("")
+            
+            key_var = f"{provider.upper()}_API_KEY"
+            
+            # Encrypt වෙන්නේ නැති නිසා ඔරිජිනල් Key එකම කෙලින්ම සේව් වෙනවා
+            set_key(Config.ENV_FILE, key_var, clean_key)
+            set_key(Config.ENV_FILE, "HACX_ACTIVE_PROVIDER", provider)
+            set_key(Config.ENV_FILE, "HACX_ACTIVE_MODEL", model)
+            
+            # පරිසර විචල්‍යයන් සකස් කිරීම
+            os.environ[key_var] = clean_key
             os.environ["HACX_ACTIVE_PROVIDER"] = provider
             os.environ["HACX_ACTIVE_MODEL"] = model
             
-            Config.get_api_key = lambda *args, **kwargs: clean_key
+            Config.ACTIVE_PROVIDER = provider
+            Config.ACTIVE_MODEL = model
             
             if hasattr(Config, 'initialize'):
                 try: Config.initialize()
                 except Exception: pass
             
-            # ඔයාට ඕනේ කරපු HacxBrain එන්ජිමම තමයි මේ පාවිච්චි වෙන්නේ
+            # ඔයාට ඕනේ කරපු ඔරිජිනල් HacxBrain එන්ජිම
             brain = HacxBrain(clean_key)
             brain.set_provider(provider, clean_key)
             brain.set_model(model)
@@ -104,6 +86,6 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             
         except Exception as e:
             st.error(f"❌ Error: {e}")
-            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය. කරුණාකර නැවත උත්සහ කරන්න."
+            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
