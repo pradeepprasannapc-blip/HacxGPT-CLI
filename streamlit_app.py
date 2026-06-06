@@ -3,7 +3,6 @@ import os
 import requests
 
 # --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
-# HacxBrain එන්ජිමට කිසිදු වෙනසක් නොකර, දෝෂ සහිත api.py වෙනුවට මෙය ක්‍රියාත්මක වේ.
 class MockDelta:
     def __init__(self, content):
         self.content = content
@@ -37,9 +36,7 @@ class NativeGeminiCompletions:
         if system_text:
             payload["system_instruction"] = {"parts": [{"text": system_text}]}
         
-        # 100% ක් නිවැරදි Google Native API ලින්ක් එක (401 Error එක සම්පූර්ණයෙන්ම වළක්වයි)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
-        
         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
         
         if res.status_code != 200:
@@ -54,8 +51,8 @@ class NativeClient:
             def __init__(self, key):
                 self.completions = NativeGeminiCompletions(key)
         self.chat = Chat(api_key)
-# -------------------------------------------------------------
 
+# --- Streamlit UI Setup ---
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 
 try:
@@ -65,13 +62,8 @@ try:
     import hacxgpt.core.brain as brain_module
     from dotenv import set_key
     
-    # Key එක විකාර වීම වැලැක්වීමට Security Bypass කිරීම
     Security.encrypt = lambda text: text
     Security.decrypt = lambda text: text
-    
-    # 🔴 මෙතනින් තමයි HacxBrain එකේ දෝෂ සහිත Client එක අයින් කරලා, 
-    # අපේ 100% නිවැරදි Native Client එක එන්ජිමට සම්බන්ධ කරන්නේ. 
-    # මේකෙන් එන්ජිමේ කිසිම ෆීචර් එකක් නැති වෙන්නේ නෑ!
     brain_module.Client = NativeClient
 
 except ImportError as e:
@@ -112,33 +104,29 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             if not os.path.exists(Config.ENV_FILE):
                  with open(Config.ENV_FILE, 'w') as f: f.write("")
             
-            key_var = f"{provider.upper()}_API_KEY"
-            set_key(Config.ENV_FILE, key_var, clean_key)
-            set_key(Config.ENV_FILE, "HACX_ACTIVE_PROVIDER", provider)
-            set_key(Config.ENV_FILE, "HACX_ACTIVE_MODEL", model)
-            
-            os.environ[key_var] = clean_key
-            os.environ["HACX_ACTIVE_PROVIDER"] = provider
-            os.environ["HACX_ACTIVE_MODEL"] = model
-            
+            set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
             
-            if hasattr(Config, 'initialize'):
-                try: Config.initialize()
-                except Exception: pass
-            
-            # HacxBrain එන්ජිම පණ ගැන්වීම
             brain = HacxBrain(clean_key)
             brain.model = model 
             
-            # Chat එක ආරම්භ කිරීම (දැන් දෝෂ සහිත api.py වෙනුවට අපේ Native එක වැඩ කරයි)
             generator = brain.chat(prompt)
             
             for chunk in generator:
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
-            message_placeholder.markdown(full_response)
+            
+            # --- මෙතනින් තමයි සිංහලට පරිවර්තනය වෙන්නේ ---
+            try:
+                trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+                trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
+                trans_res = requests.post(trans_url, json=trans_payload).json()
+                final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
+                message_placeholder.markdown(final_response)
+                full_response = final_response
+            except:
+                message_placeholder.markdown(full_response)
             
         except Exception as e:
             st.error(f"❌ Error: {e}")
