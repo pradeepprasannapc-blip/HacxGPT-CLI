@@ -4,11 +4,8 @@ import os
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
 
 try:
-    # CLI එකේ තියෙන ඔක්කොම Security සහ Config ෆයිල්ස් මෙතනට ගන්නවා
     from hacxgpt.config import Config
     from hacxgpt.core.brain import HacxBrain
-    from hacxgpt.utils.security import Security
-    from dotenv import set_key
 except ImportError as e:
     st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
     st.stop()
@@ -43,30 +40,27 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         try:
             clean_key = api_key.strip()
             
-            # 🔴 මෙන්න මේ කොටස තමයි කලින් අඩු වෙලා තිබුණේ
-            # ටර්මිනල් එකේ වගේම .env ෆයිල් එකක් හදලා ඒකට Encrypt කරලා Key එක දානවා
-            if not os.path.exists(Config.ENV_FILE):
-                 with open(Config.ENV_FILE, 'w') as f: f.write("")
-                 
-            encrypted_key = Security.encrypt(clean_key)
-            key_var = f"{provider.upper()}_API_KEY"
+            # 🔴 මෙතනින් කෙලින්ම Environment Variables වලට Key එක දෙනවා
+            os.environ["GEMINI_API_KEY"] = clean_key
+            os.environ["GOOGLE_API_KEY"] = clean_key
+            os.environ["HACX_ACTIVE_PROVIDER"] = provider
+            os.environ["HACX_ACTIVE_MODEL"] = model
             
-            set_key(Config.ENV_FILE, key_var, encrypted_key)
-            set_key(Config.ENV_FILE, "HACX_ACTIVE_PROVIDER", provider)
-            set_key(Config.ENV_FILE, "HACX_ACTIVE_MODEL", model)
-            
-            # Config එක Initialize කරාම ඒකෙන් ස්වයංක්‍රීයව Key එක Decrypt කරගන්නවා
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
-            Config.initialize()
             
-            # App එකට අවශ්‍ය විදිහටම config එකෙන් නිවැරදි key එක ගන්නවා
-            app_key = Config.get_api_key()
-            if not app_key:
-                app_key = clean_key
+            # 🔴 ප්‍රධාන වෙනස: HacxGPT එන්ජිමේ Key එක ගන්න Function එක Override කරනවා!
+            # මෙතනින් වෙන්නේ එන්ජිම කොතනින් Key එක ඉල්ලුවත්, Encrypt කරපු එක දෙන්නේ නැතුව 
+            # කෙලින්ම අපේ ඔරිජිනල් Clean Key එක ලබා දෙන එකයි.
+            Config.get_api_key = lambda *args, **kwargs: clean_key
             
-            brain = HacxBrain(app_key)
-            brain.set_provider(provider, app_key)
+            if hasattr(Config, 'initialize'):
+                try: Config.initialize()
+                except Exception: pass
+            
+            # ඔයාට ඕනේ කරපු HacxBrain එන්ජිමම තමයි මේ පාවිච්චි වෙන්නේ!
+            brain = HacxBrain(clean_key)
+            brain.set_provider(provider, clean_key)
             brain.set_model(model)
             
             generator = brain.chat(prompt)
@@ -78,6 +72,6 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             
         except Exception as e:
             st.error(f"❌ Error: {e}")
-            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
+            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය. කරුණාකර නැවත උත්සහ කරන්න."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
