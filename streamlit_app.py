@@ -16,7 +16,9 @@ with st.sidebar:
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
-    model = st.text_input("Model Name", value="gemini-pro" if provider=="gemini" else "gpt-3.5-turbo")
+    
+    # 🔴 මෙතන මම අලුත් Gemini Model එක default විදිහට දැම්මා
+    model = st.text_input("Model Name", value="gemini-1.5-flash" if provider=="gemini" else "gpt-3.5-turbo")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -38,26 +40,28 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         full_response = ""
         
         try:
-            # පරිසර විචල්‍යයන් (Environment Variables) සැකසීම
+            # .strip() මගින් Key එකේ මුල/අග තියෙන හිස්තැන් ස්වයංක්‍රීයව මකා දමයි
+            clean_key = api_key.strip()
+            
             os.environ["HACX_ACTIVE_PROVIDER"] = provider
             os.environ["HACX_ACTIVE_MODEL"] = model
-            os.environ[f"{provider.upper()}_API_KEY"] = api_key
+            os.environ[f"{provider.upper()}_API_KEY"] = clean_key
             
-            # Gemini සඳහා විශේෂයෙන් Google API Key නමද සැකසීම
             if provider == "gemini":
-                os.environ["GOOGLE_API_KEY"] = api_key
+                os.environ["GOOGLE_API_KEY"] = clean_key
+                # 🔴 HacxGPT මගහැර කෙලින්ම Google Library එකට Key එක දීම
+                import google.generativeai as genai
+                genai.configure(api_key=clean_key)
             
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
             
             if hasattr(Config, 'initialize'):
-                try:
-                    Config.initialize()
-                except Exception:
-                    pass
+                try: Config.initialize()
+                except Exception: pass
             
-            brain = HacxBrain(api_key)
-            brain.set_provider(provider, api_key)
+            brain = HacxBrain(clean_key)
+            brain.set_provider(provider, clean_key)
             brain.set_model(model)
             
             generator = brain.chat(prompt)
@@ -68,8 +72,7 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             message_placeholder.markdown(full_response)
             
         except Exception as e:
-            # Error එක පැහැදිලිව පෙන්වන්න
             st.error(f"❌ Error: {e}")
-            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය. කරුණාකර API Key එක නිවැරදි දැයි පරීක්ෂා කරන්න."
+            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
