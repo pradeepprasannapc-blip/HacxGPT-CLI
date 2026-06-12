@@ -8,7 +8,7 @@ import sqlite3
 import bcrypt
 
 # =====================================================================================================
-# 🧠 --- (පරණ කෝඩ් එක) AI Brain/Engine කොටස - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🧠
+# 🧠 --- AI Brain/Engine කොටස - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🧠
 # =====================================================================================================
 class MockDelta:
     def __init__(self, content):
@@ -128,17 +128,14 @@ try:
     brain_module.Client = NativeClient
 
 except ImportError as e:
-    # බොහෝ විට local ෆයිල්ස් නැති නිසා error එකක් එයි. testing සදහා එය ignore කරමු.
     st.warning(f"HacxGPT core modules load කරගන්න බැරි වුණා. Error: {e}. නමුත් Gemini Engine එක වැඩ කරයි.")
 
 # =====================================================================================================
-# 🔐 --- (අලුත් කොටස) පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය (Security Section) --- 🔐
+# 🔐 --- පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය (Security Section) --- 🔐
 # =====================================================================================================
 
 DB_FILE = "users.db"
 CHAT_DIR = "user_chats"
-# 🔥🔥 ඔබේ ADMIN EMAIL එක සහ PASSWORD එක මෙතන දාන්න 🔥🔥
-ADMIN_EMAIL_HASH = bcrypt.hashpw(b"admin@hacx.lk", bcrypt.gensalt()).decode() # Admin email එක admin@hacx.lk ලෙස සකසමු
 
 if not os.path.exists(CHAT_DIR):
     os.makedirs(CHAT_DIR)
@@ -238,7 +235,7 @@ def delete_user_by_id(user_id):
     conn.close()
     return True
 
-# --- MULTI-CHAT MEMORY SYSTEM (සකස් කරන ලද කොටස) ---
+# --- MULTI-CHAT MEMORY SYSTEM ---
 def get_user_dir(email):
     safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
     user_dir = os.path.join(CHAT_DIR, safe_email)
@@ -272,8 +269,7 @@ if not st.session_state.logged_in:
     st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
     st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
     
-    # පිවිසුම්, ලියාපදිංචි, forget password සඳහා Tab 4ක්
-    tab1, tab2, tab3, tab4 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර සොයන්න", "👨‍💻 ඇඩ්මින්"])
+    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර සොයන්න"])
 
     # 1. Login Tab
     with tab1:
@@ -285,11 +281,13 @@ if not st.session_state.logged_in:
             
             if submitted:
                 if login_email and login_password:
-                    # ✅ ඇඩ්මින් පිවිසුම පරීක්ෂා කිරීම (මෙය admin@hacx.lk සහ 1234 ලෙස සකසමු)
+                    # ✅ ඇඩ්මින් පිවිසුම (Tab එක නැතිව Email/Pass එකෙන් විතරක් යන්න)
                     if login_email.lower() == "admin@hacx.lk" and login_password == "1234":
                          st.session_state.logged_in = True
                          st.session_state.user_email = login_email
                          st.session_state.is_admin = True
+                         st.session_state.current_chat_id = str(uuid.uuid4())
+                         st.session_state.messages = []
                          st.success("👨‍💻 ඇඩ්මින් ලෙස සාර්ථකව පිවිසුණා.")
                          st.rerun()
                     
@@ -299,7 +297,6 @@ if not st.session_state.logged_in:
                         st.session_state.user_email = user["email"]
                         st.session_state.is_admin = user["is_admin"] == 1
                         
-                        # චැට් එකක් setup කරන්න
                         st.session_state.current_chat_id = str(uuid.uuid4())
                         st.session_state.messages = []
                         st.success("✅ සාර්ථකව පිවිසුණා.")
@@ -333,7 +330,7 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("⚠️ කරුණාකර සියලුම විස්තර පුරවන්න.")
 
-    # 3. Forgot Password Tab (පරණ විස්තර සොයන්න)
+    # 3. Forgot Password Tab
     with tab3:
         st.subheader("විස්තර අමතක නම්...")
         st.info("ඔබගේ විස්තර අමතක නම්, කරුණාකර 'ඇඩ්මින්' වෙත දන්වා එය විසඳා ගන්න.")
@@ -349,26 +346,12 @@ if not st.session_state.logged_in:
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
 
-    # 4. Admin Setup Info Tab
-    with tab4:
-        st.subheader("ඇඩ්මින් පිවිසුම් විස්තර")
-        st.markdown("""
-        > **ADMIN සඳහා:** මෙම ඇප් එකේ ඇඩ්මින් පැනලය භාවිතා කිරීමට:
-        >
-        > 1.  'පිවිසෙන්න' ටැබ් එකට යන්න.
-        > 2.  Email එකට `admin@hacx.lk` යන්න.
-        > 3.  Password එකට `1234` යන්න.
-        >
-        > මෙම විස්තර ඔබ කැමති පරිදි Code එකේ වෙනස් කරගත හැක (Login/VerifyUser කොටසේ).
-        """)
-
-    st.stop() # පරිශීලකයා ලොග් වන තෙක් ඇප් එකේ ඉතිරි කොටස පටවන්නේ නැත.
+    st.stop() 
 
 # =====================================================================================================
-# 🖥️ --- (පරණ කෝඩ් එක) ඇප් එකේ ප්‍රධාන UI සහ SIDEBAR (Login වුණාට පසු පෙනෙන) --- 🖥️
+# 🖥️ --- ඇප් එකේ ප්‍රධාන UI සහ SIDEBAR (Login වුණාට පසු පෙනෙන) --- 🖥️
 # =====================================================================================================
 
-# 🔥 අලුත් ලස්සන Title එක සහ Copyright කොටස 🔥
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2024 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
@@ -376,18 +359,16 @@ user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
-# sidebar structure
 sidebar_root = st.sidebar
 sidebar_root.markdown(f"### Welcome {st.session_state.user_email.split('@')[0]}!")
 
-# සාමාන්‍ය user හෝ admin හට New Chat බොත්තම පෙන්වීම
 if sidebar_root.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True):
     st.session_state.current_chat_id = str(uuid.uuid4())
     st.session_state.messages = []
     st.rerun()
 
 # -----------------------------------------------------------------------------------------------------
-# 👨‍💻 --- (අලුත් කොටස) ADMIN PANEL SIDEBAR NAVIGATION --- 👨‍💻
+# 👨‍💻 --- ADMIN PANEL SIDEBAR NAVIGATION --- 👨‍💻
 # -----------------------------------------------------------------------------------------------------
 show_admin_panel = False
 if st.session_state.is_admin:
@@ -398,10 +379,8 @@ if st.session_state.is_admin:
     sidebar_root.divider()
 
 # -----------------------------------------------------------------------------------------------------
-# --- CHAT / ADMIN PANEL DISPLAY LOGIC ---
+# --- ADMIN PANEL DISPLAY LOGIC ---
 # -----------------------------------------------------------------------------------------------------
-
-# ඇඩ්මින් පැනලය පෙන්විය යුතු නම්
 if st.session_state.is_admin and show_admin_panel:
     st.markdown("---")
     st.header("👨‍💻 පරිශීලක කළමනාකරණය")
@@ -411,13 +390,11 @@ if st.session_state.is_admin and show_admin_panel:
         st.info("පරිශීලකයින් හමු නොවීය (හෝ Admin හැර වෙනත් කවුරුත් නැත).")
     else:
         for user_id, email, phone in users:
-            # තමන්ගේ එකවුන්ට් එක මකා දැමීමට අවසර නොදෙමු
             if email.lower() == "admin@hacx.lk":
                  continue
                  
             with st.container():
                 st.write(f"**ID:** {user_id} | **Email:** {email} | **Phone:** {phone}")
-                # User මකා දැමීම (ඔබගේ chat folder එකත් මකා දැමීමට සැකසී ඇත)
                 col1, col2 = st.columns([1, 4])
                 with col1:
                     if st.button("🗑️ Delete", key=f"del_{user_id}", type="secondary"):
@@ -431,13 +408,12 @@ if st.session_state.is_admin and show_admin_panel:
                 st.markdown("---")
     
     st.info("💡 ඇඩ්මින් පැනලය සාර්ථකව පෙන්වන ලදී. නැවත Chat එකට යාමට, 'Manage Users' බොත්තම ඔබන්න. ඔබ මේ වන විට Admin Panel එකේ සිටී.")
-    st.stop() # Chatting logic එක run වෙන්න දෙන්න එපා.
+    st.stop()
 
 # -----------------------------------------------------------------------------------------------------
-# --- MAIN CHAT UI (Admin Panel එකේ නැති විට) ---
+# --- MAIN CHAT UI ---
 # -----------------------------------------------------------------------------------------------------
 
-# Sidebar එකේ Chat ලැයිස්තුව පෙන්වීම
 with sidebar_root:
     st.markdown("### 💬 Your Chats")
     for cf in chat_files:
@@ -474,7 +450,7 @@ with sidebar_root:
         st.rerun()
 
 # -----------------------------------------------------------------------------------------------------
-# 🤖 --- (පරණ කෝඩ් එක) CHAT DISPLAY AND LOGIC - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🤖
+# 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
 
 if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -540,7 +516,6 @@ if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice 
         
         try:
             clean_key = api_key.strip()
-            # hacking Config/brain modules if present
             try:
                 if not os.path.exists(Config.ENV_FILE):
                      with open(Config.ENV_FILE, 'w') as f: f.write("")
@@ -556,14 +531,12 @@ if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice 
                     full_response += chunk
                     message_placeholder.markdown(full_response + "▌")
             except NameError:
-                # Local modules fail උනොත් Gemini wrapper එකට support දීමට
                 brain = NativeGeminiCompletions(clean_key)
                 res = brain.create(model, st.session_state.messages, stream=False)
                 full_response = res.choices[0].delta.content
                 message_placeholder.markdown(full_response)
                 
             try:
-                # ඊට පස්සේ Translate කිරීමට උත්සාහ කරන්න
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
                 trans_res = requests.post(trans_url, json=trans_payload).json()
