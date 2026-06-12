@@ -5,9 +5,10 @@ import json
 import uuid
 import base64
 import sqlite3
+import re
 
 # =====================================================================================================
-# 🧠 --- AI Brain/Engine කොටස --- 🧠
+# 🧠 --- AI Brain/Engine කොටස (කිසිදු වෙනසක් කර නොමැත) --- 🧠
 # =====================================================================================================
 class MockDelta:
     def __init__(self, content):
@@ -37,8 +38,7 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
             
-        # 🔥 සිංහලෙන් පමණක් උත්තර දීමට තදින්ම උපදෙස් දීම
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ සහ ඔබගේ අයිතිය සම්පූර්ණයෙන්ම ඇත්තේ 'Pradeep Hacx' ට පමණි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන හෝ ඔබ කවුදැයි ඇසුවොත් මේ බව ආඩම්බරයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' විසිනි. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -77,7 +77,7 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 UI & Modern CSS Styling (Manage App සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
+# --- 🔥 UI & Modern CSS Styling (Manage App බලෙන් සැඟවීම) 🔥 ---
 st.markdown("""
 <style>
 /* Streamlit UI elements hide */
@@ -85,13 +85,12 @@ header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 footer { display: none !important; visibility: hidden !important; }
-#st-deck-go-action-floating { display: none !important; }
 
 /* 🔥 Streamlit Cloud 'Manage App' badge Aggressive Hiding */
 .viewerBadge_container__1QSob { display: none !important; visibility: hidden !important; opacity: 0 !important; }
 .viewerBadge_link__1S137 { display: none !important; }
+[data-testid="stAppDeployButton"] { display: none !important; visibility: hidden !important; }
 [data-testid="manage-app-button"] { display: none !important; }
-[data-testid="stAppDeployButton"] { display: none !important; }
 .stDeployButton { display: none !important; }
 div[class^="viewerBadge"] { display: none !important; }
 div[class^="ManageApp"] { display: none !important; }
@@ -293,6 +292,9 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.is_admin = False
 
+if "saved_api_key" not in st.session_state:
+    st.session_state.saved_api_key = ""
+
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
 # =====================================================================================================
@@ -420,7 +422,9 @@ with tab_settings:
     st.divider()
     st.header("🔑 API & Model Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
-    api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
+    
+    # 🔥 අලුත්: API Key Save Button එක
+    input_api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password", value=st.session_state.saved_api_key)
 
     if provider == "gemini":
         gemini_models = ["gemini-2.5-pro", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-8b"]
@@ -428,6 +432,10 @@ with tab_settings:
     else:
         model = st.text_input("Model Name", value="gpt-3.5-turbo")
         
+    if st.button("💾 සැකසුම් සුරකින්න (Save Settings)", use_container_width=True, type="primary"):
+        st.session_state.saved_api_key = input_api_key
+        st.success("✅ සැකසුම් සාර්ථකව සුරැකුවා! දැන් '💬 AI චැට්' ටැබ් එකට ගොස් කතා කරන්න.")
+
     st.divider()
     if st.button("🚪 Logout (ඉවත් වන්න)", use_container_width=True, type="secondary"):
         st.session_state.logged_in = False
@@ -497,13 +505,20 @@ if tab_admin is not None:
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
+
+# 🔥 AI එකේ මතකයෙන් BlackTechX සහ HacxGPT මකා දමන රහස් කේතය
+def sanitize_text(text):
+    text = re.sub(r'(?i)BlackTechX', 'Pradeep Hacx', text)
+    text = re.sub(r'(?i)HacxGPT', 'Pradeep Hacx AI', text)
+    return text
+
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            st.markdown(sanitize_text(message["content"]))
             if "attachments" in message:
                 for att in message["attachments"]:
                     raw_bytes = base64.b64decode(att["data"])
@@ -549,8 +564,8 @@ with tab_chat:
         st.session_state.messages.append(new_msg)
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
 
-        if not api_key:
-            st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කරන්න.")
+        if not st.session_state.saved_api_key:
+            st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
         with st.chat_message("assistant"):
@@ -558,9 +573,7 @@ with tab_chat:
             full_response = ""
             
             try:
-                clean_key = api_key.strip()
-                
-                # 🔥 AI මොළයට සිංහලෙන් පිළිතුරු දීමට අමතරව කරන බලකිරීම (Chat Memory එකට සේව් වෙන්නේ නෑ)
+                clean_key = st.session_state.saved_api_key.strip()
                 enhanced_prompt = prompt + "\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
 
                 try:
@@ -576,8 +589,8 @@ with tab_chat:
                     generator = brain.chat(enhanced_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        message_placeholder.markdown(full_response + "▌")
-                    message_placeholder.markdown(full_response)
+                        message_placeholder.markdown(sanitize_text(full_response) + "▌")
+                    message_placeholder.markdown(sanitize_text(full_response))
 
                 except NameError:
                     brain = NativeGeminiCompletions(clean_key)
@@ -588,13 +601,13 @@ with tab_chat:
                         
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
-                    message_placeholder.markdown(full_response)
+                    message_placeholder.markdown(sanitize_text(full_response))
                 
             except Exception as e:
                 st.error(f"❌ {e}")
                 full_response = str(e)
                 
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.session_state.messages.append({"role": "assistant", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
         if len(st.session_state.messages) == 2: 
