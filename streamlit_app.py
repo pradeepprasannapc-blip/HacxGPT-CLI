@@ -29,14 +29,22 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
+        # පරණ මැසේජ් සකස් කිරීම
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
                 continue
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
+            
+        # 🔥 AI එකේ මොළයට Pradeep Hacx ගැන කාවැද්දීම (Secret Identity) 🔥
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ සහ ඔබගේ අයිතිය සම්පූර්ණයෙන්ම ඇත්තේ 'Pradeep Hacx' ට පමණි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන හෝ ඔබ කවුදැයි ඇසුවොත් මේ බව ආඩම්බරයෙන් සිංහලෙන් පවසන්න."
+        if system_text:
+            system_text = identity_prompt + "\n\n" + system_text
+        else:
+            system_text = identity_prompt
         
-        # 🔥 MULTIMODAL INTERCEPTION
+        # ෆොටෝ/වොයිස් තිබුණොත් ඇතුලත් කිරීම
         if "active_parts" in st.session_state and st.session_state.active_parts:
             for item in reversed(contents):
                 if item["role"] == "user":
@@ -67,22 +75,44 @@ class NativeClient:
         self.chat = Chat(api_key)
 
 # --- Streamlit UI Setup ---
-st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="auto")
 
-# --- 🔥 UI Hiding Fix (Sidebar Menu ඉතිරි කර Manage App මැකීම) 🔥 ---
+# --- 🔥 UI Hiding Fix (Menu එක තියලා Manage App සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
 st.markdown("""
 <style>
-/* Manage app සහ Deploy buttons මැකීම */
-.stAppDeployButton, .viewerBadge_container__1QSob, footer, #st-deck-go-action-floating { display: none !important; visibility: hidden !important; }
+/* Menu button (Hamburger) එක විතරක් ඉතුරු කරලා අනිත් දේවල් හංගමු */
+header { background: transparent !important; }
+.stAppDeployButton { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 
-/* Header එක තියාගන්නවා (Menu බට්න් එකට), හැබැයි පසුබිම clear කරනවා */
-[data-testid="stHeader"] { background-color: transparent !important; }
+/* යටින් එන Manage App සහ Streamlit දේවල් සම්පූර්ණයෙන්ම මැකීම */
+footer { visibility: hidden !important; display: none !important; }
+.viewerBadge_container__1QSob { display: none !important; }
+#st-deck-go-action-floating { display: none !important; }
+[data-testid="stBottomBar"] { display: none !important; } /* සමහර වෙලාවට එන අලුත් බාර් එක */
 
 /* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
-.block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
-
+.block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
+
+/* Custom Title Styling */
+.hacx-title {
+    text-align: center;
+    background: -webkit-linear-gradient(45deg, #ff4b4b, #ff904f);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2.5em;
+    font-weight: 800;
+    margin-bottom: 0px;
+    padding-bottom: 0px;
+}
+.hacx-subtitle {
+    text-align: center;
+    color: #888;
+    font-size: 12px;
+    margin-top: -5px;
+    margin-bottom: 20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -130,7 +160,9 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
 
 if not st.session_state.logged_in:
-    st.title("🔐 HacxGPT Login")
+    st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='hacx-subtitle'>Secure Login Portal</p>", unsafe_allow_html=True)
+    
     with st.form("login_form"):
         email_input = st.text_input("ඔබගේ Email ලිපිනය (Google Account)")
         submitted = st.form_submit_button("ඇතුලත් වන්න (Login)")
@@ -144,14 +176,17 @@ if not st.session_state.logged_in:
     st.stop()
 
 # --- MAIN APP UI & SIDEBAR ---
-st.title("🤖 HacxGPT - Web Interface")
+# 🔥 අලුත් ලස්සන Title එක සහ Copyright කොටස 🔥
+st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
+st.markdown("<p class='hacx-subtitle'>© 2024 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
 user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
 with st.sidebar:
-    if st.button("➕ New Chat", use_container_width=True):
+    st.markdown("### 👑 Pradeep Hacx AI")
+    if st.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True):
         st.session_state.current_chat_id = str(uuid.uuid4())
         st.session_state.messages = []
         st.rerun()
@@ -203,8 +238,7 @@ for message in st.session_state.messages:
                 elif att["type"].startswith("video/"): st.video(raw_bytes)
                 elif att["type"].startswith("audio/"): st.audio(raw_bytes)
 
-# --- 🔥 NATIVE APP STYLE ATTACHMENTS (POPOVER) 🔥 ---
-# Chat box එකට උඩින්ම අලුත්ම Gemini විදිහට + බට්න් එකක්
+# --- MULTIMODAL ATTACHMENTS ---
 with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
     uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
     st.markdown("---")
