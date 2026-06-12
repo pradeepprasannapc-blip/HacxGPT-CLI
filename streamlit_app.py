@@ -9,7 +9,7 @@ import sqlite3
 import re
 
 # =====================================================================================================
-# 🧠 --- AI Brain/Engine කොටස (කිසිදු වෙනසක් කර නොමැත) --- 🧠
+# 🧠 --- AI Brain/Engine කොටස --- 🧠
 # =====================================================================================================
 class MockDelta:
     def __init__(self, content):
@@ -110,7 +110,7 @@ components.html(
     width=0,
 )
 
-# --- 🔥 UI & Hiding CSS (යට හිඩැස සම්පූර්ණයෙන්ම නැති කිරීම) 🔥 ---
+# --- 🔥 UI & CSS (යට හිඩැස නැති කිරීම සහ අකුරු Wrap කිරීම) 🔥 ---
 st.markdown("""
 <style>
 header { display: none !important; }
@@ -126,6 +126,24 @@ footer { display: none !important; visibility: hidden !important; height: 0px !i
 .stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
 .viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; }
 div[class*="viewerBadge_container"] { display: none !important; }
+
+/* 🔥 සාමාන්‍ය අකුරු ලස්සනට කඩා හැලීම (Text Wrapping Fix) 🔥 */
+.stChatMessage { overflow-x: hidden !important; }
+[data-testid="stChatMessageContent"] .stMarkdown p, 
+[data-testid="stChatMessageContent"] .stMarkdown li, 
+[data-testid="stChatMessageContent"] .stMarkdown span {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 💻 කෝඩ් කොටු (Code Blocks) වලට පමණක් Scroll එකක් දීම 💻 */
+[data-testid="stChatMessageContent"] .stMarkdown pre {
+    white-space: pre !important;
+    word-wrap: normal !important;
+    overflow-x: auto !important;
+    border-radius: 8px;
+}
 
 /* Title Styling */
 .hacx-title {
