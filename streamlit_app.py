@@ -80,10 +80,12 @@ with st.sidebar: # 'With' වෙනුවට 'with' ලෙස නිවැරද
     # Provider අනුව model එක තෝරන විදිහ වෙනස් කිරීම
     if provider == "gemini":
         gemini_models = [
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-1.0-pro"
+            "gemini-2.5-pro",
+            "gemini-3.1-pro",
+            "gemini-2.5-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash-8b",
+            "gemini-3.5-flash-8b"
         ]
         model = st.selectbox("Select Gemini Model", gemini_models)
     else:
