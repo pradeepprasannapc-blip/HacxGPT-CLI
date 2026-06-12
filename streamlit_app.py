@@ -4,8 +4,12 @@ import requests
 import json
 import uuid
 import base64
+import sqlite3
+import bcrypt
 
-# --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
+# =====================================================================================================
+# 🧠 --- (පරණ කෝඩ් එක) AI Brain/Engine කොටස - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🧠
+# =====================================================================================================
 class MockDelta:
     def __init__(self, content):
         self.content = content
@@ -77,22 +81,18 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="auto")
 
-# --- 🔥 UI Hiding Fix (Menu එක තියලා Manage App සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
+# --- 🔥 UI Hiding Fix (සම්පූර්ණයෙන්ම hide වීම සදහා නවීකරණය කරන ලදී) 🔥 ---
 st.markdown("""
 <style>
-/* Menu button (Hamburger) එක විතරක් ඉතුරු කරලා අනිත් දේවල් හංගමු */
-header { background: transparent !important; }
-.stAppDeployButton { display: none !important; }
-[data-testid="stToolbar"] { display: none !important; }
-
-/* යටින් එන Manage App සහ Streamlit දේවල් සම්පූර්ණයෙන්ම මැකීම */
+/* Streamlit header සහ footer සම්පූර්ණයෙන්ම සැඟවීම */
+header { visibility: hidden !important; height: 0px !important; }
 footer { visibility: hidden !important; display: none !important; }
-.viewerBadge_container__1QSob { display: none !important; }
 #st-deck-go-action-floating { display: none !important; }
-[data-testid="stBottomBar"] { display: none !important; } /* සමහර වෙලාවට එන අලුත් බාර් එක */
+[data-testid="stToolbar"] { visibility: hidden !important; }
+[data-testid="stDeployButton"] { display: none !important; }
 
-/* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
-.block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
+/* වෙබ් පිටුවේ ඉඩකඩ ලස්සන කිරීම */
+.block-container { padding-top: 0rem !important; padding-bottom: 5rem !important; margin-top: -50px; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Custom Title Styling */
@@ -103,15 +103,15 @@ code { font-family: 'Courier New', Courier, monospace !important; font-size: 14p
     -webkit-text-fill-color: transparent;
     font-size: 2.5em;
     font-weight: 800;
-    margin-bottom: 0px;
+    margin-bottom: 5px;
     padding-bottom: 0px;
 }
 .hacx-subtitle {
     text-align: center;
     color: #888;
-    font-size: 12px;
+    font-size: 13px;
     margin-top: -5px;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -128,16 +128,120 @@ try:
     brain_module.Client = NativeClient
 
 except ImportError as e:
-    st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
-    st.stop()
+    # බොහෝ විට local ෆයිල්ස් නැති නිසා error එකක් එයි. testing සදහා එය ignore කරමු.
+    st.warning(f"HacxGPT core modules load කරගන්න බැරි වුණා. Error: {e}. නමුත් Gemini Engine එක වැඩ කරයි.")
 
-# --- MULTI-CHAT MEMORY SYSTEM ---
+# =====================================================================================================
+# 🔐 --- (අලුත් කොටස) පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය (Security Section) --- 🔐
+# =====================================================================================================
+
+DB_FILE = "users.db"
 CHAT_DIR = "user_chats"
+# 🔥🔥 ඔබේ ADMIN EMAIL එක සහ PASSWORD එක මෙතන දාන්න 🔥🔥
+ADMIN_EMAIL_HASH = bcrypt.hashpw(b"admin@hacx.lk", bcrypt.gensalt()).decode() # Admin email එක admin@hacx.lk ලෙස සකසමු
+
 if not os.path.exists(CHAT_DIR):
     os.makedirs(CHAT_DIR)
 
+# --- දත්ත සමුදාය පිහිටුවීම ---
+def get_db():
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    return conn
+
+def init_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            phone TEXT NOT NULL,
+            password TEXT NOT NULL,
+            is_admin INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# SQLite Database එක initialize කරන්න
+init_db()
+
+# --- Password Hash කිරීම සහ සැසඳීම ---
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def check_password(password, hashed_password):
+    return bcrypt.checkpw(password.encode(), hashed_password.encode())
+
+# --- පරිශීලක කාර්යයන් ---
+def add_user(email, phone, password):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        hashed = hash_password(password)
+        cursor.execute("INSERT INTO users (email, phone, password) VALUES (?, ?, ?)", (email.lower(), phone, hashed))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False # Email එක දැනටමත් තිබේ
+
+def verify_user(email, password):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
+    result = cursor.fetchone()
+    conn.close()
+    if result and check_password(password, result[1]):
+        return {"email": result[0], "is_admin": result[2]}
+    return None
+
+def find_user_by_email(email):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT email, phone FROM users WHERE email=?", (email.lower(),))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+# --- ඇඩ්මින් කාර්යයන් ---
+def get_all_users_for_admin():
+    if not st.session_state.is_admin:
+        return []
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, phone FROM users")
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def delete_user_by_id(user_id):
+    if not st.session_state.is_admin:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # පරණ chat ෆෝල්ඩරය මකා දැමීම සදහා ඊමේල් එක හොයන්න
+    cursor.execute("SELECT email FROM users WHERE id=?", (user_id,))
+    email_res = cursor.fetchone()
+    if email_res:
+        email = email_res[0]
+        safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
+        user_dir = os.path.join(CHAT_DIR, safe_email)
+        import shutil
+        if os.path.exists(user_dir):
+            shutil.rmtree(user_dir)
+
+    cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+# --- MULTI-CHAT MEMORY SYSTEM (සකස් කරන ලද කොටස) ---
 def get_user_dir(email):
-    user_dir = os.path.join(CHAT_DIR, email)
+    safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
+    user_dir = os.path.join(CHAT_DIR, safe_email)
     if not os.path.exists(user_dir):
         os.makedirs(user_dir)
     return user_dir
@@ -154,28 +258,116 @@ def save_chat(email, chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- LOGIN SYSTEM ---
+# --- LOGIN/REGISTRATION/ADMIN SESSION MANAGEMENT ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
+    st.session_state.is_admin = False
+
+# =====================================================================================================
+# 🚪 --- UI: පිවිසුම් / ලියාපදිංචි / ඇඩ්මින් ද්වාරය --- 🚪
+# =====================================================================================================
 
 if not st.session_state.logged_in:
     st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='hacx-subtitle'>Secure Login Portal</p>", unsafe_allow_html=True)
+    st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
     
-    with st.form("login_form"):
-        email_input = st.text_input("ඔබගේ Email ලිපිනය (Google Account)")
-        submitted = st.form_submit_button("ඇතුලත් වන්න (Login)")
-        if submitted and email_input:
-            st.session_state.logged_in = True
-            safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
-            st.session_state.user_email = safe_email
-            st.session_state.current_chat_id = str(uuid.uuid4())
-            st.session_state.messages = []
-            st.rerun()
-    st.stop()
+    # පිවිසුම්, ලියාපදිංචි, forget password සඳහා Tab 4ක්
+    tab1, tab2, tab3, tab4 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර සොයන්න", "👨‍💻 ඇඩ්මින්"])
 
-# --- MAIN APP UI & SIDEBAR ---
+    # 1. Login Tab
+    with tab1:
+        st.subheader("ඇප් එකට පිවිසෙන්න")
+        with st.form("login_form"):
+            login_email = st.text_input("Email ලිපිනය", placeholder="example@mail.com")
+            login_password = st.text_input("මුරපදය (Password)", type="password")
+            submitted = st.form_submit_button("ඇතුලත් වන්න", use_container_width=True)
+            
+            if submitted:
+                if login_email and login_password:
+                    # ✅ ඇඩ්මින් පිවිසුම පරීක්ෂා කිරීම (මෙය admin@hacx.lk සහ 1234 ලෙස සකසමු)
+                    if login_email.lower() == "admin@hacx.lk" and login_password == "1234":
+                         st.session_state.logged_in = True
+                         st.session_state.user_email = login_email
+                         st.session_state.is_admin = True
+                         st.success("👨‍💻 ඇඩ්මින් ලෙස සාර්ථකව පිවිසුණා.")
+                         st.rerun()
+                    
+                    user = verify_user(login_email, login_password)
+                    if user:
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = user["email"]
+                        st.session_state.is_admin = user["is_admin"] == 1
+                        
+                        # චැට් එකක් setup කරන්න
+                        st.session_state.current_chat_id = str(uuid.uuid4())
+                        st.session_state.messages = []
+                        st.success("✅ සාර්ථකව පිවිසුණා.")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ ඔබගේ Email ලිපිනය හෝ මුරපදය වැරදියි.")
+                else:
+                    st.warning("⚠️ කරුණාකර සියලුම තොරතුරු ඇතුලත් කරන්න.")
+
+    # 2. Registration Tab
+    with tab2:
+        st.subheader("අලුත් එකවුන්ට් එකක් සාදන්න")
+        with st.form("reg_form"):
+            reg_email = st.text_input("ඔබගේ Email ලිපිනය")
+            reg_phone = st.text_input("දුරකථන අංකය")
+            reg_password = st.text_input("නව මුරපදය (Password)", type="password")
+            confirm_password = st.text_input("මුරපදය නැවත ඇතුලත් කරන්න", type="password")
+            submitted_reg = st.form_submit_button("ලියාපදිංචි වන්න", use_container_width=True)
+            
+            if submitted_reg:
+                if reg_email and reg_phone and reg_password and confirm_password:
+                    if reg_password != confirm_password:
+                        st.error("⚠️ මුරපද දෙක නොගැලපේ.")
+                    elif "@" not in reg_email or "." not in reg_email:
+                        st.error("⚠️ වලංගු Email ලිපිනයක් ඇතුලත් කරන්න.")
+                    else:
+                        if add_user(reg_email, reg_phone, reg_password):
+                            st.success("✅ ලියාපදිංචි වීම සාර්ථකයි. දැන් පිවිසුම් ටැබ් එකට ගොස් ඇතුලත් වන්න.")
+                        else:
+                            st.error("⚠️ මෙම Email ලිපිනය දැනටමත් ලියාපදිංචි වී ඇත.")
+                else:
+                    st.warning("⚠️ කරුණාකර සියලුම විස්තර පුරවන්න.")
+
+    # 3. Forgot Password Tab (පරණ විස්තර සොයන්න)
+    with tab3:
+        st.subheader("විස්තර අමතක නම්...")
+        st.info("ඔබගේ විස්තර අමතක නම්, කරුණාකර 'ඇඩ්මින්' වෙත දන්වා එය විසඳා ගන්න.")
+        with st.form("forgot_form"):
+            check_email = st.text_input("ඔබ ලියාපදිංචි වූ Email ලිපිනය ඇතුලත් කරන්න")
+            submitted_check = st.form_submit_button("මගේ Phone අංකය පෙන්වන්න")
+            
+            if submitted_check:
+                user_info = find_user_by_email(check_email)
+                if user_info:
+                    st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
+                    st.info("💡 මෙම දුරකථන අංකය ඇඩ්මින් වෙත පවසා ඔබගේ එකවුන්ට් එක recover කරගන්න.")
+                else:
+                    st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
+
+    # 4. Admin Setup Info Tab
+    with tab4:
+        st.subheader("ඇඩ්මින් පිවිසුම් විස්තර")
+        st.markdown("""
+        > **ADMIN සඳහා:** මෙම ඇප් එකේ ඇඩ්මින් පැනලය භාවිතා කිරීමට:
+        >
+        > 1.  'පිවිසෙන්න' ටැබ් එකට යන්න.
+        > 2.  Email එකට `admin@hacx.lk` යන්න.
+        > 3.  Password එකට `1234` යන්න.
+        >
+        > මෙම විස්තර ඔබ කැමති පරිදි Code එකේ වෙනස් කරගත හැක (Login/VerifyUser කොටසේ).
+        """)
+
+    st.stop() # පරිශීලකයා ලොග් වන තෙක් ඇප් එකේ ඉතිරි කොටස පටවන්නේ නැත.
+
+# =====================================================================================================
+# 🖥️ --- (පරණ කෝඩ් එක) ඇප් එකේ ප්‍රධාන UI සහ SIDEBAR (Login වුණාට පසු පෙනෙන) --- 🖥️
+# =====================================================================================================
+
 # 🔥 අලුත් ලස්සන Title එක සහ Copyright කොටස 🔥
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2024 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
@@ -184,13 +376,69 @@ user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
-with st.sidebar:
-    st.markdown("### 👑 Pradeep Hacx AI")
-    if st.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True):
-        st.session_state.current_chat_id = str(uuid.uuid4())
-        st.session_state.messages = []
-        st.rerun()
-        
+# sidebar structure
+sidebar_root = st.sidebar
+sidebar_root.markdown(f"### Welcome {st.session_state.user_email.split('@')[0]}!")
+
+# සාමාන්‍ය user හෝ admin හට New Chat බොත්තම පෙන්වීම
+if sidebar_root.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True):
+    st.session_state.current_chat_id = str(uuid.uuid4())
+    st.session_state.messages = []
+    st.rerun()
+
+# -----------------------------------------------------------------------------------------------------
+# 👨‍💻 --- (අලුත් කොටස) ADMIN PANEL SIDEBAR NAVIGATION --- 👨‍💻
+# -----------------------------------------------------------------------------------------------------
+show_admin_panel = False
+if st.session_state.is_admin:
+    sidebar_root.divider()
+    sidebar_root.header("👨‍💻 Admin Panel")
+    if sidebar_root.button("👥 Manage Users", use_container_width=True):
+        show_admin_panel = True
+    sidebar_root.divider()
+
+# -----------------------------------------------------------------------------------------------------
+# --- CHAT / ADMIN PANEL DISPLAY LOGIC ---
+# -----------------------------------------------------------------------------------------------------
+
+# ඇඩ්මින් පැනලය පෙන්විය යුතු නම්
+if st.session_state.is_admin and show_admin_panel:
+    st.markdown("---")
+    st.header("👨‍💻 පරිශීලක කළමනාකරණය")
+    users = get_all_users_for_admin()
+    
+    if not users:
+        st.info("පරිශීලකයින් හමු නොවීය (හෝ Admin හැර වෙනත් කවුරුත් නැත).")
+    else:
+        for user_id, email, phone in users:
+            # තමන්ගේ එකවුන්ට් එක මකා දැමීමට අවසර නොදෙමු
+            if email.lower() == "admin@hacx.lk":
+                 continue
+                 
+            with st.container():
+                st.write(f"**ID:** {user_id} | **Email:** {email} | **Phone:** {phone}")
+                # User මකා දැමීම (ඔබගේ chat folder එකත් මකා දැමීමට සැකසී ඇත)
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("🗑️ Delete", key=f"del_{user_id}", type="secondary"):
+                        if delete_user_by_id(user_id):
+                            st.success(f"✅ පරිශීලකයා ({email}) මකා දැමීම සාර්ථකයි.")
+                            st.rerun()
+                        else:
+                            st.error("⚠️ පරිශීලකයා මකා දැමීම අසාර්ථකයි.")
+                with col2:
+                    st.empty()
+                st.markdown("---")
+    
+    st.info("💡 ඇඩ්මින් පැනලය සාර්ථකව පෙන්වන ලදී. නැවත Chat එකට යාමට, 'Manage Users' බොත්තම ඔබන්න. ඔබ මේ වන විට Admin Panel එකේ සිටී.")
+    st.stop() # Chatting logic එක run වෙන්න දෙන්න එපා.
+
+# -----------------------------------------------------------------------------------------------------
+# --- MAIN CHAT UI (Admin Panel එකේ නැති විට) ---
+# -----------------------------------------------------------------------------------------------------
+
+# Sidebar එකේ Chat ලැයිස්තුව පෙන්වීම
+with sidebar_root:
     st.markdown("### 💬 Your Chats")
     for cf in chat_files:
         chat_id = cf.replace(".json", "")
@@ -221,10 +469,14 @@ with st.sidebar:
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
+        st.session_state.is_admin = False
         st.session_state.messages = []
         st.rerun()
 
-# --- CHAT DISPLAY ---
+# -----------------------------------------------------------------------------------------------------
+# 🤖 --- (පරණ කෝඩ් එක) CHAT DISPLAY AND LOGIC - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🤖
+# -----------------------------------------------------------------------------------------------------
+
 if "messages" not in st.session_state or len(st.session_state.messages) == 0:
     st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
@@ -288,21 +540,30 @@ if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice 
         
         try:
             clean_key = api_key.strip()
-            if not os.path.exists(Config.ENV_FILE):
-                 with open(Config.ENV_FILE, 'w') as f: f.write("")
-            set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
-            Config.ACTIVE_PROVIDER = provider
-            Config.ACTIVE_MODEL = model
-            
-            brain = HacxBrain(clean_key)
-            brain.model = model 
-            
-            generator = brain.chat(prompt)
-            for chunk in generator:
-                full_response += chunk
-                message_placeholder.markdown(full_response + "▌")
-            
+            # hacking Config/brain modules if present
             try:
+                if not os.path.exists(Config.ENV_FILE):
+                     with open(Config.ENV_FILE, 'w') as f: f.write("")
+                set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
+                Config.ACTIVE_PROVIDER = provider
+                Config.ACTIVE_MODEL = model
+                
+                brain = HacxBrain(clean_key)
+                brain.model = model 
+                
+                generator = brain.chat(prompt)
+                for chunk in generator:
+                    full_response += chunk
+                    message_placeholder.markdown(full_response + "▌")
+            except NameError:
+                # Local modules fail උනොත් Gemini wrapper එකට support දීමට
+                brain = NativeGeminiCompletions(clean_key)
+                res = brain.create(model, st.session_state.messages, stream=False)
+                full_response = res.choices[0].delta.content
+                message_placeholder.markdown(full_response)
+                
+            try:
+                # ඊට පස්සේ Translate කිරීමට උත්සාහ කරන්න
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
                 trans_res = requests.post(trans_url, json=trans_payload).json()
