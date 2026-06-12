@@ -3,7 +3,6 @@ import os
 import requests
 import json
 import uuid
-import time
 
 # --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
 class MockDelta:
@@ -58,17 +57,20 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
 
-# --- UI Hiding (Header, Footer, MainMenu) ---
-# මෙතනින් Deploy button එකයි, 3-dots menu එකයි විතරක් මකනවා. 
-# Sidebar එක ගන්න තියෙන Hamburger Menu එක ඉතුරු කරනවා.
-hide_ui_css = """
+# --- UI Hiding & Custom Styling ---
+# මෙතනින් අනවශ්‍ය දේවල් Hide කරනවා. කෝඩ් බ්ලොක්ස් වලට ස්ටයිල් එකතු කරනවා.
+st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 .stDeployButton {display:none;}
+/* කෝඩ් කොපි කරන තැන පෙනුම සහ අකුරු පැහැදිලි කිරීම */
+code {
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 14px !important;
+}
 </style>
-"""
-st.markdown(hide_ui_css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 try:
     from hacxgpt.config import Config
@@ -126,7 +128,7 @@ if not st.session_state.logged_in:
                 st.session_state.logged_in = True
                 safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
                 st.session_state.user_email = safe_email
-                st.session_state.current_chat_id = str(uuid.uuid4()) # ලොග් වෙද්දිම අලුත් චැට් එකක් හැදෙනවා
+                st.session_state.current_chat_id = str(uuid.uuid4())
                 st.session_state.messages = []
                 st.rerun()
             else:
@@ -138,7 +140,6 @@ st.title("🤖 HacxGPT - Web Interface")
 
 user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
-# අලුත්ම චැට් උඩින් පේන්න sort කරනවා
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
 with st.sidebar:
@@ -155,14 +156,12 @@ with st.sidebar:
         chat_id = cf.replace(".json", "")
         msgs = load_chat(st.session_state.user_email, chat_id)
         
-        # චැට් එකේ නම විදිහට පලවෙනි ප්‍රශ්නෙ මුල් අකුරු ටික ගන්නවා
         title = "Empty Chat"
         for m in msgs:
             if m["role"] == "user":
                 title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
                 break
         
-        # දැනට ඉන්න චැට් එක හයිලයිට් කරන්න පොඩි emoji එකක්
         prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
         if st.button(f"{prefix}{title}", key=chat_id, use_container_width=True):
             st.session_state.current_chat_id = chat_id
@@ -200,9 +199,10 @@ with st.sidebar:
         st.rerun()
 
 # --- CHAT DISPLAY & LOGIC ---
-if "messages" not in st.session_state:
+if "messages" not in st.session_state or len(st.session_state.messages) == 0:
     st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
+# පරණ මැසේජ් ලස්සනට Display කිරීම
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -240,11 +240,14 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
             
+            # --- 🔥 සිංහල පරිවර්තන කොටස (ස්ථිරවම පවතී) 🔥 ---
             try:
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
                 trans_res = requests.post(trans_url, json=trans_payload).json()
                 final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # මෙතනින් තමයි කෝඩ් බ්ලොක්ස් වලට "Copy" බට්න් එක ඔටෝ හැදෙන්නේ
                 message_placeholder.markdown(final_response)
                 full_response = final_response
             except:
@@ -256,6 +259,6 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
-    # අලුත් චැට් එකක් පටන් ගත්තම ඒක Sidebar එකේ පෙන්නන්න රීෆ්‍රෙශ් කරනවා
+    
     if len(st.session_state.messages) == 2: 
         st.rerun()
