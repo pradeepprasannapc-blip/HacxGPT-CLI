@@ -37,7 +37,9 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
             
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ සහ ඔබගේ අයිතිය සම්පූර්ණයෙන්ම ඇත්තේ 'Pradeep Hacx' ට පමණි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන හෝ ඔබ කවුදැයි ඇසුවොත් මේ බව ආඩම්බරයෙන් සිංහලෙන් පවසන්න."
+        # 🔥 සිංහලෙන් පමණක් උත්තර දීමට තදින්ම උපදෙස් දීම
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ සහ ඔබගේ අයිතිය සම්පූර්ණයෙන්ම ඇත්තේ 'Pradeep Hacx' ට පමණි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන හෝ ඔබ කවුදැයි ඇසුවොත් මේ බව ආඩම්බරයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
         else:
@@ -75,27 +77,30 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 UI & Modern CSS Styling (Manage App & Menus සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
+# --- 🔥 UI & Modern CSS Styling (Manage App සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
 st.markdown("""
 <style>
 /* Streamlit UI elements hide */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-footer { display: none !important; }
+footer { display: none !important; visibility: hidden !important; }
 #st-deck-go-action-floating { display: none !important; }
 
-/* Streamlit Cloud 'Manage App' badge hide aggressively */
-.viewerBadge_container__1QSob { display: none !important; }
+/* 🔥 Streamlit Cloud 'Manage App' badge Aggressive Hiding */
+.viewerBadge_container__1QSob { display: none !important; visibility: hidden !important; opacity: 0 !important; }
 .viewerBadge_link__1S137 { display: none !important; }
 [data-testid="manage-app-button"] { display: none !important; }
-iframe[title="streamlitApp"] { padding-bottom: 0 !important; }
+[data-testid="stAppDeployButton"] { display: none !important; }
+.stDeployButton { display: none !important; }
+div[class^="viewerBadge"] { display: none !important; }
+div[class^="ManageApp"] { display: none !important; }
 
 /* Spacing Fix */
 .block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
-/* 🔥 Modern Gradient Title */
+/* Modern Gradient Title */
 .hacx-title {
     text-align: center;
     background: linear-gradient(90deg, #ff4b4b, #ff904f, #ff4b4b);
@@ -232,7 +237,6 @@ def delete_user_by_id(user_id):
     conn.close()
     return True
 
-# 🔥 අලුත්: Admin ට Password Edit කරන්න Function එකක්
 def update_user_password(user_id, new_password):
     if not st.session_state.is_admin:
         return False
@@ -243,7 +247,6 @@ def update_user_password(user_id, new_password):
     conn.close()
     return True
 
-# --- Notification Functions ---
 def add_notification(email, message):
     conn = get_db()
     cursor = conn.cursor()
@@ -266,7 +269,6 @@ def delete_notification(notif_id):
     conn.commit()
     conn.close()
 
-# --- Chat Memory Functions ---
 def get_user_dir(email):
     safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
     user_dir = os.path.join(CHAT_DIR, safe_email)
@@ -299,7 +301,6 @@ if not st.session_state.logged_in:
     st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
     st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
     
-    # 🔥 අලුත්: 'මුරපදය අමතක නම්' කියලා නම වෙනස් කළා
     tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "❓ මුරපදය අමතක නම්"])
 
     with tab1:
@@ -384,10 +385,6 @@ user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
-# -----------------------------------------------------------------------------------------------------
-# 🔥 --- TABS SETUP (පැහැදිලිව වෙන් කිරීම) --- 🔥
-# -----------------------------------------------------------------------------------------------------
-
 if st.session_state.is_admin:
     tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 චැට් ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 Admin Panel"])
     tab_support = None
@@ -439,7 +436,7 @@ with tab_settings:
         st.session_state.messages = []
         st.rerun()
 
-# --- 🎧 SUPPORT TAB (For normal users) ---
+# --- 🎧 SUPPORT TAB ---
 if tab_support is not None:
     with tab_support:
         st.markdown("### 🎧 ඇඩ්මින්ට පණිවිඩයක් යවන්න")
@@ -457,7 +454,6 @@ if tab_support is not None:
 # --- 👨‍💻 ADMIN PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
-        # Notifications Section
         st.markdown("### 🔔 පරිශීලක පණිවිඩ සහ ගැටලු")
         notifications = get_notifications()
         if not notifications:
@@ -472,8 +468,6 @@ if tab_admin is not None:
                         st.rerun()
                         
         st.divider()
-        
-        # User Management Section (With Password Edit)
         st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         users = get_all_users_for_admin()
         
@@ -483,22 +477,18 @@ if tab_admin is not None:
             for user_id, email, phone, password in users:
                 if email.lower() == "admin@hacx.lk":
                      continue
-                     
-                # 🔥 අලුත්: Expander එකක් හරහා ලස්සනට Password Edit කිරීම
                 with st.expander(f"👤 {email}"):
                     st.write(f"**Phone Number:** {phone}")
                     st.markdown("---")
-                    
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         new_pass = st.text_input("මුරපදය වෙනස් කරන්න (Edit Password)", value=password, key=f"pass_{user_id}")
                     with col2:
-                        st.write("") # Spacing
+                        st.write("")
                         st.write("")
                         if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
                             update_user_password(user_id, new_pass)
                             st.success("මුරපදය වෙනස් කළා!")
-                            
                     st.markdown("---")
                     if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
                         if delete_user_by_id(user_id):
@@ -569,6 +559,10 @@ with tab_chat:
             
             try:
                 clean_key = api_key.strip()
+                
+                # 🔥 AI මොළයට සිංහලෙන් පිළිතුරු දීමට අමතරව කරන බලකිරීම (Chat Memory එකට සේව් වෙන්නේ නෑ)
+                enhanced_prompt = prompt + "\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
+
                 try:
                     if not os.path.exists(Config.ENV_FILE):
                          with open(Config.ENV_FILE, 'w') as f: f.write("")
@@ -579,24 +573,21 @@ with tab_chat:
                     brain = HacxBrain(clean_key)
                     brain.model = model 
                     
-                    generator = brain.chat(prompt)
+                    generator = brain.chat(enhanced_prompt)
                     for chunk in generator:
                         full_response += chunk
                         message_placeholder.markdown(full_response + "▌")
+                    message_placeholder.markdown(full_response)
+
                 except NameError:
                     brain = NativeGeminiCompletions(clean_key)
-                    res = brain.create(model, st.session_state.messages, stream=False)
-                    full_response = res.choices[0].delta.content
-                    message_placeholder.markdown(full_response)
                     
-                try:
-                    trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
-                    trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
-                    trans_res = requests.post(trans_url, json=trans_payload).json()
-                    final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
-                    message_placeholder.markdown(final_response)
-                    full_response = final_response
-                except:
+                    temp_messages = list(st.session_state.messages)
+                    if temp_messages and temp_messages[-1]["role"] == "user":
+                        temp_messages[-1]["content"] = enhanced_prompt
+                        
+                    res = brain.create(model, temp_messages, stream=False)
+                    full_response = res.choices[0].delta.content
                     message_placeholder.markdown(full_response)
                 
             except Exception as e:
