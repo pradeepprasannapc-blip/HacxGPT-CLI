@@ -5,16 +5,13 @@ import json
 import uuid
 import base64
 import sqlite3
-import bcrypt
 
 # =====================================================================================================
-# 🧠 --- AI Brain/Engine කොටස - මෙයට කිසිදු වෙනසක් සිදු කර නොමැත --- 🧠
+# 🧠 --- AI Brain/Engine කොටස --- 🧠
 # =====================================================================================================
 class MockDelta:
     def __init__(self, content):
         self.content = content
-        self.reasoning_content = None
-        self.thought = None
 
 class MockChoice:
     def __init__(self, content):
@@ -78,38 +75,53 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="auto")
 
-# --- 🔥 UI Hiding Fix (Menu බට්න් එක පේන්න හදලා තියෙන්නේ) 🔥 ---
+# --- 🔥 UI & Modern CSS Styling 🔥 ---
 st.markdown("""
 <style>
-/* Menu button (Hamburger) එක විතරක් ඉතුරු කරලා අනිත් දේවල් හංගමු */
+/* Streamlit UI elements hide */
 header { background: transparent !important; }
 [data-testid="stToolbar"] { display: none !important; }
-
-/* යටින් එන Manage App සහ Streamlit දේවල් සම්පූර්ණයෙන්ම මැකීම */
 footer { visibility: hidden !important; display: none !important; }
 #st-deck-go-action-floating { display: none !important; }
 
-/* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
-.block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
+/* Spacing Fix */
+.block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
-/* Custom Title Styling */
+/* 🔥 Modern Gradient Title */
 .hacx-title {
     text-align: center;
-    background: -webkit-linear-gradient(45deg, #ff4b4b, #ff904f);
+    background: linear-gradient(90deg, #ff4b4b, #ff904f, #ff4b4b);
+    background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    font-size: 2.5em;
-    font-weight: 800;
-    margin-bottom: 5px;
+    font-size: 3.2em;
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: 0px;
     padding-bottom: 0px;
+    animation: shine 3s linear infinite;
+}
+@keyframes shine {
+    to { background-position: 200% center; }
 }
 .hacx-subtitle {
     text-align: center;
-    color: #888;
-    font-size: 13px;
+    color: #a0a0a0;
+    font-size: 14px;
+    font-weight: 500;
     margin-top: -5px;
-    margin-bottom: 25px;
+    margin-bottom: 30px;
+}
+
+/* Modern Admin Cards */
+.admin-card {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -120,16 +132,14 @@ try:
     from hacxgpt.utils.security import Security
     import hacxgpt.core.brain as brain_module
     from dotenv import set_key
-    
     Security.encrypt = lambda text: text
     Security.decrypt = lambda text: text
     brain_module.Client = NativeClient
-
-except ImportError as e:
-    st.warning(f"HacxGPT core modules load කරගන්න බැරි වුණා. නමුත් Gemini Engine එක වැඩ කරයි.")
+except ImportError:
+    pass
 
 # =====================================================================================================
-# 🔐 --- පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය --- 🔐
+# 🔐 --- දත්ත සමුදාය (Plain-text Passwords) --- 🔐
 # =====================================================================================================
 
 DB_FILE = "users.db"
@@ -159,18 +169,12 @@ def init_db():
 
 init_db()
 
-def hash_password(password):
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-def check_password(password, hashed_password):
-    return bcrypt.checkpw(password.encode(), hashed_password.encode())
-
+# මුරපද කේතනය (Hash) කිරීම ඉවත් කර ඇත
 def add_user(email, phone, password):
     conn = get_db()
     cursor = conn.cursor()
     try:
-        hashed = hash_password(password)
-        cursor.execute("INSERT INTO users (email, phone, password) VALUES (?, ?, ?)", (email.lower(), phone, hashed))
+        cursor.execute("INSERT INTO users (email, phone, password) VALUES (?, ?, ?)", (email.lower(), phone, password))
         conn.commit()
         conn.close()
         return True
@@ -184,7 +188,7 @@ def verify_user(email, password):
     cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
     result = cursor.fetchone()
     conn.close()
-    if result and check_password(password, result[1]):
+    if result and result[1] == password:  # කෙලින්ම සමානද බලයි
         return {"email": result[0], "is_admin": result[2]}
     return None
 
@@ -201,7 +205,7 @@ def get_all_users_for_admin():
         return []
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, phone FROM users")
+    cursor.execute("SELECT id, email, phone, password FROM users")
     result = cursor.fetchall()
     conn.close()
     return result
@@ -259,7 +263,7 @@ if not st.session_state.logged_in:
     st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
     st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර සොයන්න"])
+    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර"])
 
     with tab1:
         st.subheader("ඇප් එකට පිවිසෙන්න")
@@ -325,7 +329,6 @@ if not st.session_state.logged_in:
                 user_info = find_user_by_email(check_email)
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
-                    st.info("💡 මෙම දුරකථන අංකය ඇඩ්මින් වෙත පවසා ඔබගේ එකවුන්ට් එක recover කරගන්න.")
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
 
@@ -336,9 +339,8 @@ if not st.session_state.logged_in:
 # =====================================================================================================
 
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
-st.markdown("<p class='hacx-subtitle'>© 2024 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
+st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
-# --- Sidebar එකේ සැකසුම් ---
 user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
@@ -386,44 +388,43 @@ with sidebar_root:
         st.session_state.messages = []
         st.rerun()
 
-# -----------------------------------------------------------------------------------------------------
-# 🔥 --- ඇඩ්මින් නම් TABS පෙන්වීම --- 🔥
-# -----------------------------------------------------------------------------------------------------
-
 if st.session_state.is_admin:
     tab_chat, tab_admin = st.tabs(["💬 AI චැට්", "👨‍💻 Admin Panel"])
 else:
-    # සාමාන්‍ය කෙනෙක්ට Tab පේන්නේ නෑ, කෙලින්ම චැට් එක විතරයි
     tab_chat = st.container()
     tab_admin = None
 
-# --- Admin Panel Logic ---
+# -----------------------------------------------------------------------------------------------------
+# 🔥 --- අලුත් ලස්සන ADMIN PANEL එක --- 🔥
+# -----------------------------------------------------------------------------------------------------
 if tab_admin is not None:
     with tab_admin:
-        st.header("👨‍💻 පරිශීලක කළමනාකරණය")
+        st.markdown("### 👥 ලියාපදිංචි වූ පරිශීලකයින්")
         users = get_all_users_for_admin()
         
         if not users:
             st.info("පරිශීලකයින් හමු නොවීය.")
         else:
-            for user_id, email, phone in users:
+            for user_id, email, phone, password in users:
                 if email.lower() == "admin@hacx.lk":
                      continue
                      
-                with st.container():
-                    st.write(f"**ID:** {user_id} | **Email:** {email} | **Phone:** {phone}")
-                    if st.button("🗑️ Delete", key=f"del_{user_id}", type="secondary"):
-                        if delete_user_by_id(user_id):
-                            st.success(f"✅ පරිශීලකයා ({email}) මකා දැමීම සාර්ථකයි.")
-                            st.rerun()
-                        else:
-                            st.error("⚠️ පරිශීලකයා මකා දැමීම අසාර්ථකයි.")
-                    st.markdown("---")
+                with st.container(border=True):
+                    col_info, col_btn = st.columns([4, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**👤 {email}**")
+                        st.caption(f"📞 Phone: `{phone}` | 🔑 Password: `{password}`")
+                        
+                    with col_btn:
+                        if st.button("🗑️", key=f"del_{user_id}", help="මෙම පරිශීලකයා ඉවත් කරන්න"):
+                            if delete_user_by_id(user_id):
+                                st.success(f"මකා දැමීම සාර්ථකයි.")
+                                st.rerun()
 
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
-
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
