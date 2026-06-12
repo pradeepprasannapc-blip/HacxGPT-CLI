@@ -3,8 +3,9 @@ import os
 import requests
 import json
 import uuid
+import base64
 
-# --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
+# --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක (එන්ජිමට හානියක් නොවන පරිදි) 🔥 ---
 class MockDelta:
     def __init__(self, content):
         self.content = content
@@ -27,12 +28,23 @@ class NativeGeminiCompletions:
     def create(self, model, messages, stream=False, temperature=0.75):
         contents = []
         system_text = ""
+        
+        # 1. පරණ මැසේජ් හිස්ට්‍රිය සහ අලුත් ප්‍රශ්නය සාමාන්‍ය පරිදි සකස් කිරීම
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
                 continue
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
+        
+        # 2. 🔥 MULTIMODAL INTERCEPTION: ෆොටෝ/වොයිස් තියෙනවා නම් එය අන්තිම මැසේජ් එකට රහසේම සම්බන්ධ කිරීම
+        if "active_parts" in st.session_state and st.session_state.active_parts:
+            for item in reversed(contents):
+                if item["role"] == "user":
+                    item["parts"] = st.session_state.active_parts
+                    break
+            # එක පාරක් යැවූ පසු එය Clear කිරීම (පරිවර්තනයට හෝ ඊළඟ ප්‍රශ්නෙට පැටලෙන්නේ නැති වීමට)
+            st.session_state.active_parts = None
         
         payload = {"contents": contents}
         if system_text:
@@ -57,18 +69,20 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
 
-# --- UI Hiding & Custom Styling ---
-# මෙතනින් අනවශ්‍ය දේවල් Hide කරනවා. කෝඩ් බ්ලොක්ස් වලට ස්ටයිල් එකතු කරනවා.
+# --- 🔥 UI Hiding Fix (Header, Footer, Toolbar) 🔥 ---
 st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-.stDeployButton {display:none;}
-/* කෝඩ් කොපි කරන තැන පෙනුම සහ අකුරු පැහැදිලි කිරීම */
-code {
-    font-family: 'Courier New', Courier, monospace !important;
-    font-size: 14px !important;
-}
+/* අනවශ්‍ය සියලුම දේවල් මැකීම */
+[data-testid="stHeader"] { display: none !important; }
+[data-testid="stToolbar"] { display: none !important; }
+.stAppDeployButton { display: none !important; }
+footer { visibility: hidden !important; display: none !important; }
+
+/* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
+.block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
+
+/* කෝඩ් කොපි කරන කොටස පැහැදිලි කිරීම */
+code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -81,6 +95,7 @@ try:
     
     Security.encrypt = lambda text: text
     Security.decrypt = lambda text: text
+    # HacxBrain එන්ජිමට අලුත් කන්/ඇස් සවිකිරීම
     brain_module.Client = NativeClient
 
 except ImportError as e:
@@ -143,7 +158,6 @@ chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
 with st.sidebar:
-    # 1. New Chat Button
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state.current_chat_id = str(uuid.uuid4())
         st.session_state.messages = []
@@ -151,7 +165,6 @@ with st.sidebar:
         
     st.markdown("### 💬 Your Chats")
     
-    # 2. Chat History List
     for cf in chat_files:
         chat_id = cf.replace(".json", "")
         msgs = load_chat(st.session_state.user_email, chat_id)
@@ -170,7 +183,6 @@ with st.sidebar:
 
     st.divider()
     
-    # 3. Settings
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
@@ -191,26 +203,69 @@ with st.sidebar:
         
     st.divider()
     
-    # 4. Logout Button
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
         st.session_state.messages = []
         st.rerun()
 
-# --- CHAT DISPLAY & LOGIC ---
+# --- CHAT DISPLAY ---
 if "messages" not in st.session_state or len(st.session_state.messages) == 0:
     st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
-# පරණ මැසේජ් ලස්සනට Display කිරීම
+# පරණ මැසේජ් සහ ඒවායේ තිබූ පින්තූර/හඬ පට නැවත පෙන්වීම
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        if "attachments" in message:
+            for att in message["attachments"]:
+                raw_bytes = base64.b64decode(att["data"])
+                if att["type"].startswith("image/"): st.image(raw_bytes)
+                elif att["type"].startswith("video/"): st.video(raw_bytes)
+                elif att["type"].startswith("audio/"): st.audio(raw_bytes)
 
+# --- 🔥 MULTIMODAL INPUTS FEATURE (ෆොටෝ / වොයිස් එකතු කිරීම) 🔥 ---
+with st.expander("📎 Attach Media (පින්තූර / වීඩියෝ / හඬ එකතු කරන්න)", expanded=False):
+    uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video, Audio)", type=["png", "jpg", "jpeg", "mp4", "mp3", "wav", "m4a"])
+    voice_file = st.audio_input("🎙️ හඬක් පටිගත කරන්න (Voice Recorder)")
+
+# --- CHAT LOGIC ---
 if prompt := st.chat_input("මොනවා හරි අහන්න..."):
-    st.chat_message("user").markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    attachments = []
+    active_parts = [{"text": prompt}]
     
+    # පින්තූර හෝ වීඩියෝ සැකසීම
+    if uploaded_file:
+        file_bytes = uploaded_file.getvalue()
+        b64_data = base64.b64encode(file_bytes).decode("utf-8")
+        attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+        active_parts.append({"inline_data": {"mime_type": uploaded_file.type, "data": b64_data}})
+        
+    # Voice රෙකෝඩින් සැකසීම
+    if voice_file:
+        voice_bytes = voice_file.getvalue()
+        b64_data = base64.b64encode(voice_bytes).decode("utf-8")
+        attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
+        active_parts.append({"inline_data": {"mime_type": voice_file.type, "data": b64_data}})
+        
+    # Wrapper එකට කියවීමට සුරැකීම
+    st.session_state.active_parts = active_parts
+    
+    # User Screen එකේ ක්ෂණිකව පෙන්වීම
+    with st.chat_message("user"):
+        st.markdown(prompt)
+        if uploaded_file:
+            if uploaded_file.type.startswith("image/"): st.image(file_bytes)
+            elif uploaded_file.type.startswith("video/"): st.video(file_bytes)
+            elif uploaded_file.type.startswith("audio/"): st.audio(file_bytes)
+        if voice_file:
+            st.audio(voice_bytes)
+            
+    new_msg = {"role": "user", "content": prompt}
+    if attachments:
+        new_msg["attachments"] = attachments
+        
+    st.session_state.messages.append(new_msg)
     save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
 
     if not api_key:
@@ -234,20 +289,21 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             brain = HacxBrain(clean_key)
             brain.model = model 
             
+            # මුල් මොළයට හානියක් නැත, එය ක්‍රියාත්මක වන්නේ අකුරු වලින්මය
             generator = brain.chat(prompt)
             
             for chunk in generator:
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
             
-            # --- 🔥 සිංහල පරිවර්තන කොටස (ස්ථිරවම පවතී) 🔥 ---
+            # --- සිංහල පරිවර්තනය ---
             try:
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
                 trans_res = requests.post(trans_url, json=trans_payload).json()
                 final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
                 
-                # මෙතනින් තමයි කෝඩ් බ්ලොක්ස් වලට "Copy" බට්න් එක ඔටෝ හැදෙන්නේ
+                # කොපි බට්න් එකත් එක්කම අවසන් උත්තරය පෙන්වීම
                 message_placeholder.markdown(final_response)
                 full_response = final_response
             except:
