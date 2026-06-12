@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import requests
 import json
@@ -77,7 +78,28 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 UI & Manage App Hiding CSS (අතිශය දරුණු ලෙස සැඟවීම) 🔥 ---
+# --- 🔥 Manage App මකා දැමීමේ රහස් JavaScript (JS Hunter) 🔥 ---
+components.html(
+    """
+    <script>
+    // Streamlit Cloud එකෙන් දාන හැම ලාංඡනයක්ම හොයලා මකා දමනවා
+    setInterval(function() {
+        var elements = window.parent.document.querySelectorAll('[class*="viewerBadge"], [data-testid="manage-app-button"], [data-testid="stAppDeployButton"], .stDeployButton');
+        for (var i = 0; i < elements.length; i++) {
+            elements[i].style.display = 'none';
+            elements[i].style.visibility = 'hidden';
+            elements[i].style.opacity = '0';
+            elements[i].style.width = '0px';
+            elements[i].style.height = '0px';
+        }
+    }, 100);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
+# --- 🔥 UI & Manage App Hiding CSS 🔥 ---
 st.markdown("""
 <style>
 /* Main Streamlit elements */
@@ -86,13 +108,10 @@ header { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 footer { display: none !important; visibility: hidden !important; }
 
-/* 🔥 Streamlit Community Cloud Badge Aggressive Hide 🔥 */
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
-.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+/* CSS Backup Hide */
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; }
 div[class*="viewerBadge_container"] { display: none !important; }
-div[class*="viewerBadge"] { display: none !important; }
-iframe[title="streamlitApp"] { padding-bottom: 0 !important; }
-#st-deck-go-action-floating { display: none !important; }
 
 /* Spacing Fix */
 .block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
@@ -153,7 +172,6 @@ def init_db():
             is_admin INTEGER DEFAULT 0 
         )
     """)
-    # is_admin: 0 = User, 1 = Admin, 2 = Moderator
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -207,7 +225,7 @@ def get_all_users_for_admin():
     return result
 
 def delete_user_by_id(user_id):
-    if st.session_state.user_role != 1: # Only Super Admin can delete
+    if st.session_state.user_role != 1: 
         return False
     conn = get_db()
     cursor = conn.cursor()
@@ -236,7 +254,7 @@ def update_user_password(user_id, new_password):
     return True
 
 def update_user_role(user_id, role_int):
-    if st.session_state.user_role != 1: # Only Super Admin can assign roles
+    if st.session_state.user_role != 1: 
         return False
     conn = get_db()
     cursor = conn.cursor()
@@ -299,7 +317,7 @@ def save_chat(email, chat_id, messages):
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
-    st.session_state.user_role = 0 # 0=User, 1=Admin, 2=Mod
+    st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
 
 # =====================================================================================================
