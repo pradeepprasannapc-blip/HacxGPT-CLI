@@ -73,19 +73,26 @@ class NativeClient:
         self.chat = Chat(api_key)
 
 # --- Streamlit UI Setup ---
-st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="auto")
+st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 UI & Modern CSS Styling 🔥 ---
+# --- 🔥 UI & Modern CSS Styling (Manage App & Menus සම්පූර්ණයෙන්ම මැකීම) 🔥 ---
 st.markdown("""
 <style>
 /* Streamlit UI elements hide */
-header { background: transparent !important; }
+header { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-footer { visibility: hidden !important; display: none !important; }
+footer { display: none !important; }
 #st-deck-go-action-floating { display: none !important; }
 
+/* Streamlit Cloud 'Manage App' badge hide aggressively */
+.viewerBadge_container__1QSob { display: none !important; }
+.viewerBadge_link__1S137 { display: none !important; }
+[data-testid="manage-app-button"] { display: none !important; }
+iframe[title="streamlitApp"] { padding-bottom: 0 !important; }
+
 /* Spacing Fix */
-.block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important; }
+.block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* 🔥 Modern Gradient Title */
@@ -113,16 +120,6 @@ code { font-family: 'Courier New', Courier, monospace !important; font-size: 14p
     margin-top: -5px;
     margin-bottom: 30px;
 }
-
-/* Modern Admin Cards */
-.admin-card {
-    background-color: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -139,7 +136,7 @@ except ImportError:
     pass
 
 # =====================================================================================================
-# 🔐 --- දත්ත සමුදාය (Plain-text Passwords) --- 🔐
+# 🔐 --- දත්ත සමුදාය (Database) --- 🔐
 # =====================================================================================================
 
 DB_FILE = "users.db"
@@ -164,12 +161,18 @@ def init_db():
             is_admin INTEGER DEFAULT 0
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            message TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
 init_db()
 
-# මුරපද කේතනය (Hash) කිරීම ඉවත් කර ඇත
 def add_user(email, phone, password):
     conn = get_db()
     cursor = conn.cursor()
@@ -188,7 +191,7 @@ def verify_user(email, password):
     cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
     result = cursor.fetchone()
     conn.close()
-    if result and result[1] == password:  # කෙලින්ම සමානද බලයි
+    if result and result[1] == password:
         return {"email": result[0], "is_admin": result[2]}
     return None
 
@@ -215,7 +218,6 @@ def delete_user_by_id(user_id):
         return False
     conn = get_db()
     cursor = conn.cursor()
-    
     cursor.execute("SELECT email FROM users WHERE id=?", (user_id,))
     email_res = cursor.fetchone()
     if email_res:
@@ -225,12 +227,46 @@ def delete_user_by_id(user_id):
         import shutil
         if os.path.exists(user_dir):
             shutil.rmtree(user_dir)
-
     cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
     conn.close()
     return True
 
+# 🔥 අලුත්: Admin ට Password Edit කරන්න Function එකක්
+def update_user_password(user_id, new_password):
+    if not st.session_state.is_admin:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET password=? WHERE id=?", (new_password, user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+# --- Notification Functions ---
+def add_notification(email, message):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO notifications (email, message) VALUES (?, ?)", (email.lower(), message))
+    conn.commit()
+    conn.close()
+
+def get_notifications():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, message FROM notifications ORDER BY id DESC")
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def delete_notification(notif_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM notifications WHERE id=?", (notif_id,))
+    conn.commit()
+    conn.close()
+
+# --- Chat Memory Functions ---
 def get_user_dir(email):
     safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
     user_dir = os.path.join(CHAT_DIR, safe_email)
@@ -263,7 +299,8 @@ if not st.session_state.logged_in:
     st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
     st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර"])
+    # 🔥 අලුත්: 'මුරපදය අමතක නම්' කියලා නම වෙනස් කළා
+    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "❓ මුරපදය අමතක නම්"])
 
     with tab1:
         st.subheader("ඇප් එකට පිවිසෙන්න")
@@ -319,16 +356,18 @@ if not st.session_state.logged_in:
                     st.warning("⚠️ කරුණාකර සියලුම විස්තර පුරවන්න.")
 
     with tab3:
-        st.subheader("විස්තර අමතක නම්...")
-        st.info("ඔබගේ විස්තර අමතක නම්, කරුණාකර 'ඇඩ්මින්' වෙත දන්වා එය විසඳා ගන්න.")
+        st.subheader("මුරපදය අමතක වී ඇත්නම්...")
+        st.info("කරුණාකර ඔබගේ ඊමේල් ලිපිනය ඇතුලත් කරන්න. අපි ඔබගේ ඉල්ලීම ඇඩ්මින් වෙත යොමු කරන්නෙමු.")
         with st.form("forgot_form"):
             check_email = st.text_input("ඔබ ලියාපදිංචි වූ Email ලිපිනය ඇතුලත් කරන්න")
-            submitted_check = st.form_submit_button("මගේ Phone අංකය පෙන්වන්න")
+            submitted_check = st.form_submit_button("ඇඩ්මින්ට දැනුම් දෙන්න")
             
             if submitted_check:
                 user_info = find_user_by_email(check_email)
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
+                    add_notification(check_email, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    st.success("✅ ඇඩ්මින් වෙත පණිවිඩයක් යවන ලදී! ඇඩ්මින් විසින් ඔබගේ දුරකථනයට හෝ ඊමේල් එකට සම්බන්ධ වනු ඇත.")
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
 
@@ -345,16 +384,25 @@ user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
-sidebar_root = st.sidebar
-sidebar_root.markdown(f"### Welcome {st.session_state.user_email.split('@')[0]}!")
+# -----------------------------------------------------------------------------------------------------
+# 🔥 --- TABS SETUP (පැහැදිලිව වෙන් කිරීම) --- 🔥
+# -----------------------------------------------------------------------------------------------------
 
-if sidebar_root.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True):
-    st.session_state.current_chat_id = str(uuid.uuid4())
-    st.session_state.messages = []
-    st.rerun()
+if st.session_state.is_admin:
+    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 චැට් ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 Admin Panel"])
+    tab_support = None
+else:
+    tab_chat, tab_history, tab_settings, tab_support = st.tabs(["💬 AI චැට්", "📝 චැට් ඉතිහාසය", "⚙️ සැකසුම්", "🎧 සහය (Support)"])
+    tab_admin = None
 
-with sidebar_root:
-    st.markdown("### 💬 Your Chats")
+# --- 📝 CHAT HISTORY TAB ---
+with tab_history:
+    st.markdown("### 💬 Your Chats (ඔබගේ පැරණි කතා)")
+    if st.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True, type="primary"):
+        st.session_state.current_chat_id = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.rerun()
+        
     for cf in chat_files:
         chat_id = cf.replace(".json", "")
         msgs = load_chat(st.session_state.user_email, chat_id)
@@ -364,13 +412,16 @@ with sidebar_root:
                 title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
                 break
         prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
-        if st.button(f"{prefix}{title}", key=chat_id, use_container_width=True):
+        if st.button(f"{prefix}{title}", key=f"hist_{chat_id}", use_container_width=True):
             st.session_state.current_chat_id = chat_id
             st.session_state.messages = msgs
             st.rerun()
 
+# --- ⚙️ SETTINGS TAB ---
+with tab_settings:
+    st.markdown(f"### 👤 Welcome {st.session_state.user_email.split('@')[0]}!")
     st.divider()
-    st.header("⚙️ Settings")
+    st.header("🔑 API & Model Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
 
@@ -381,25 +432,49 @@ with sidebar_root:
         model = st.text_input("Model Name", value="gpt-3.5-turbo")
         
     st.divider()
-    if st.button("🚪 Logout", use_container_width=True):
+    if st.button("🚪 Logout (ඉවත් වන්න)", use_container_width=True, type="secondary"):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
         st.session_state.is_admin = False
         st.session_state.messages = []
         st.rerun()
 
-if st.session_state.is_admin:
-    tab_chat, tab_admin = st.tabs(["💬 AI චැට්", "👨‍💻 Admin Panel"])
-else:
-    tab_chat = st.container()
-    tab_admin = None
+# --- 🎧 SUPPORT TAB (For normal users) ---
+if tab_support is not None:
+    with tab_support:
+        st.markdown("### 🎧 ඇඩ්මින්ට පණිවිඩයක් යවන්න")
+        st.info("ඔබට ඇප් එකේ ප්‍රශ්නයක් තියෙනවා නම් හෝ ඇඩ්මින්ගෙන් යමක් දැනගැනීමට අවශ්‍ය නම් පහතින් යවන්න.")
+        with st.form("support_form"):
+            user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=150)
+            submitted_msg = st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True)
+            if submitted_msg:
+                if user_message.strip():
+                    add_notification(st.session_state.user_email, f"💬 පණිවිඩයක්: {user_message}")
+                    st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
+                else:
+                    st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
-# -----------------------------------------------------------------------------------------------------
-# 🔥 --- අලුත් ලස්සන ADMIN PANEL එක --- 🔥
-# -----------------------------------------------------------------------------------------------------
+# --- 👨‍💻 ADMIN PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
-        st.markdown("### 👥 ලියාපදිංචි වූ පරිශීලකයින්")
+        # Notifications Section
+        st.markdown("### 🔔 පරිශීලක පණිවිඩ සහ ගැටලු")
+        notifications = get_notifications()
+        if not notifications:
+            st.info("අලුත් පණිවිඩ නොමැත.")
+        else:
+            for n_id, n_email, n_msg in notifications:
+                with st.container(border=True):
+                    st.caption(f"📩 From: {n_email}")
+                    st.warning(n_msg)
+                    if st.button("✓ විසඳුවා (Clear)", key=f"notif_{n_id}"):
+                        delete_notification(n_id)
+                        st.rerun()
+                        
+        st.divider()
+        
+        # User Management Section (With Password Edit)
+        st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         users = get_all_users_for_admin()
         
         if not users:
@@ -409,18 +484,25 @@ if tab_admin is not None:
                 if email.lower() == "admin@hacx.lk":
                      continue
                      
-                with st.container(border=True):
-                    col_info, col_btn = st.columns([4, 1])
+                # 🔥 අලුත්: Expander එකක් හරහා ලස්සනට Password Edit කිරීම
+                with st.expander(f"👤 {email}"):
+                    st.write(f"**Phone Number:** {phone}")
+                    st.markdown("---")
                     
-                    with col_info:
-                        st.markdown(f"**👤 {email}**")
-                        st.caption(f"📞 Phone: `{phone}` | 🔑 Password: `{password}`")
-                        
-                    with col_btn:
-                        if st.button("🗑️", key=f"del_{user_id}", help="මෙම පරිශීලකයා ඉවත් කරන්න"):
-                            if delete_user_by_id(user_id):
-                                st.success(f"මකා දැමීම සාර්ථකයි.")
-                                st.rerun()
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න (Edit Password)", value=password, key=f"pass_{user_id}")
+                    with col2:
+                        st.write("") # Spacing
+                        st.write("")
+                        if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
+                            update_user_password(user_id, new_pass)
+                            st.success("මුරපදය වෙනස් කළා!")
+                            
+                    st.markdown("---")
+                    if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
+                        if delete_user_by_id(user_id):
+                            st.rerun()
 
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
@@ -478,7 +560,7 @@ with tab_chat:
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
 
         if not api_key:
-            st.error("⚠️ කරුණාකර Sidebar එකෙන් API Key එක ඇතුලත් කරන්න.")
+            st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කරන්න.")
             st.stop()
 
         with st.chat_message("assistant"):
