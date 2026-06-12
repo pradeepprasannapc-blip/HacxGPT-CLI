@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import requests
 import json
+import uuid
+import time
 
 # --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
 class MockDelta:
@@ -57,13 +59,13 @@ class NativeClient:
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
 
 # --- UI Hiding (Header, Footer, MainMenu) ---
-# මෙතනින් Streamlit branding එකයි Footer එකයි මකනවා. හැබැයි Menu Button එක ඉතුරු කරනවා.
+# මෙතනින් Deploy button එකයි, 3-dots menu එකයි විතරක් මකනවා. 
+# Sidebar එක ගන්න තියෙන Hamburger Menu එක ඉතුරු කරනවා.
 hide_ui_css = """
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-header {background-color: transparent !important;}
-[data-testid="stToolbar"] {visibility: hidden !important;}
+.stDeployButton {display:none;}
 </style>
 """
 st.markdown(hide_ui_css, unsafe_allow_html=True)
@@ -83,20 +85,26 @@ except ImportError as e:
     st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
     st.stop()
 
-# --- DATABASE / MEMORY SYSTEM ---
+# --- MULTI-CHAT MEMORY SYSTEM ---
 CHAT_DIR = "user_chats"
 if not os.path.exists(CHAT_DIR):
     os.makedirs(CHAT_DIR)
 
-def load_chat(email):
-    file_path = os.path.join(CHAT_DIR, f"{email}.json")
+def get_user_dir(email):
+    user_dir = os.path.join(CHAT_DIR, email)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return user_dir
+
+def load_chat(email, chat_id):
+    file_path = os.path.join(get_user_dir(email), f"{chat_id}.json")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
-def save_chat(email, messages):
-    file_path = os.path.join(CHAT_DIR, f"{email}.json")
+def save_chat(email, chat_id, messages):
+    file_path = os.path.join(get_user_dir(email), f"{chat_id}.json")
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
@@ -116,27 +124,54 @@ if not st.session_state.logged_in:
         if submitted:
             if email_input:
                 st.session_state.logged_in = True
-                # Email එක ෆයිල් නේම් එකක් විදිහට පාවිච්චි කරන්න පුළුවන් විදිහට හදනවා
                 safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
                 st.session_state.user_email = safe_email
+                st.session_state.current_chat_id = str(uuid.uuid4()) # ලොග් වෙද්දිම අලුත් චැට් එකක් හැදෙනවා
+                st.session_state.messages = []
                 st.rerun()
             else:
                 st.error("⚠️ කරුණාකර Email ලිපිනයක් ලබා දෙන්න.")
-    st.stop() # ලොග් වෙලා නැත්නම් මෙතනින් එහාට ඇප් එක run වෙන්නේ නෑ
+    st.stop()
 
-# --- MAIN APP (After Login) ---
-st.title(f"🤖 HacxGPT - Web Interface")
+# --- MAIN APP UI & SIDEBAR ---
+st.title("🤖 HacxGPT - Web Interface")
 
-# Logout Button in top right
-col1, col2 = st.columns([8, 2])
-with col2:
-    if st.button("🚪 Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.session_state.messages = []
-        st.rerun()
+user_dir = get_user_dir(st.session_state.user_email)
+chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
+# අලුත්ම චැට් උඩින් පේන්න sort කරනවා
+chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
 with st.sidebar:
+    # 1. New Chat Button
+    if st.button("➕ New Chat", use_container_width=True):
+        st.session_state.current_chat_id = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.rerun()
+        
+    st.markdown("### 💬 Your Chats")
+    
+    # 2. Chat History List
+    for cf in chat_files:
+        chat_id = cf.replace(".json", "")
+        msgs = load_chat(st.session_state.user_email, chat_id)
+        
+        # චැට් එකේ නම විදිහට පලවෙනි ප්‍රශ්නෙ මුල් අකුරු ටික ගන්නවා
+        title = "Empty Chat"
+        for m in msgs:
+            if m["role"] == "user":
+                title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
+                break
+        
+        # දැනට ඉන්න චැට් එක හයිලයිට් කරන්න පොඩි emoji එකක්
+        prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
+        if st.button(f"{prefix}{title}", key=chat_id, use_container_width=True):
+            st.session_state.current_chat_id = chat_id
+            st.session_state.messages = msgs
+            st.rerun()
+
+    st.divider()
+    
+    # 3. Settings
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
@@ -154,10 +189,19 @@ with st.sidebar:
     else:
         default_model = "gpt-3.5-turbo" if provider == "openai" else "llama3-8b-8192"
         model = st.text_input("Model Name", value=default_model)
+        
+    st.divider()
+    
+    # 4. Logout Button
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.messages = []
+        st.rerun()
 
-# --- LOAD HISTORY FOR THE LOGGED IN USER ---
-if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-    st.session_state.messages = load_chat(st.session_state.user_email)
+# --- CHAT DISPLAY & LOGIC ---
+if "messages" not in st.session_state:
+    st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -167,8 +211,7 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # යුසර් ප්‍රශ්නෙ ඇහුව ගමන් සේව් කරනවා
-    save_chat(st.session_state.user_email, st.session_state.messages)
+    save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
 
     if not api_key:
         st.error("⚠️ කරුණාකර Sidebar එකෙන් API Key එක ඇතුලත් කරන්න.")
@@ -191,14 +234,12 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             brain = HacxBrain(clean_key)
             brain.model = model 
             
-            # (වෙනස් කලේ නෑ)
             generator = brain.chat(prompt)
             
             for chunk in generator:
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
             
-            # --- මෙතනින් තමයි සිංහලට පරිවර්තනය වෙන්නේ ---
             try:
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
@@ -214,5 +255,7 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
-    # AI උත්තර දුන්නට පස්සෙත් චැට් එක සේව් කරනවා
-    save_chat(st.session_state.user_email, st.session_state.messages)
+    save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+    # අලුත් චැට් එකක් පටන් ගත්තම ඒක Sidebar එකේ පෙන්නන්න රීෆ්‍රෙශ් කරනවා
+    if len(st.session_state.messages) == 2: 
+        st.rerun()
