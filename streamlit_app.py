@@ -33,7 +33,6 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
-        # පරණ මැසේජ් සකස් කිරීම
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
@@ -41,14 +40,12 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
             
-        # 🔥 AI එකේ මොළයට Pradeep Hacx ගැන කාවැද්දීම (Secret Identity) 🔥
         identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ සහ ඔබගේ අයිතිය සම්පූර්ණයෙන්ම ඇත්තේ 'Pradeep Hacx' ට පමණි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන හෝ ඔබ කවුදැයි ඇසුවොත් මේ බව ආඩම්බරයෙන් සිංහලෙන් පවසන්න."
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
         else:
             system_text = identity_prompt
         
-        # ෆොටෝ/වොයිස් තිබුණොත් ඇතුලත් කිරීම
         if "active_parts" in st.session_state and st.session_state.active_parts:
             for item in reversed(contents):
                 if item["role"] == "user":
@@ -81,18 +78,19 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="auto")
 
-# --- 🔥 UI Hiding Fix (සම්පූර්ණයෙන්ම hide වීම සදහා නවීකරණය කරන ලදී) 🔥 ---
+# --- 🔥 UI Hiding Fix (Menu බට්න් එක පේන්න හදලා තියෙන්නේ) 🔥 ---
 st.markdown("""
 <style>
-/* Streamlit header සහ footer සම්පූර්ණයෙන්ම සැඟවීම */
-header { visibility: hidden !important; height: 0px !important; }
+/* Menu button (Hamburger) එක විතරක් ඉතුරු කරලා අනිත් දේවල් හංගමු */
+header { background: transparent !important; }
+[data-testid="stToolbar"] { display: none !important; }
+
+/* යටින් එන Manage App සහ Streamlit දේවල් සම්පූර්ණයෙන්ම මැකීම */
 footer { visibility: hidden !important; display: none !important; }
 #st-deck-go-action-floating { display: none !important; }
-[data-testid="stToolbar"] { visibility: hidden !important; }
-[data-testid="stDeployButton"] { display: none !important; }
 
-/* වෙබ් පිටුවේ ඉඩකඩ ලස්සන කිරීම */
-.block-container { padding-top: 0rem !important; padding-bottom: 5rem !important; margin-top: -50px; }
+/* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
+.block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Custom Title Styling */
@@ -128,10 +126,10 @@ try:
     brain_module.Client = NativeClient
 
 except ImportError as e:
-    st.warning(f"HacxGPT core modules load කරගන්න බැරි වුණා. Error: {e}. නමුත් Gemini Engine එක වැඩ කරයි.")
+    st.warning(f"HacxGPT core modules load කරගන්න බැරි වුණා. නමුත් Gemini Engine එක වැඩ කරයි.")
 
 # =====================================================================================================
-# 🔐 --- පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය (Security Section) --- 🔐
+# 🔐 --- පරිශීලක සහ දත්ත සමුදාය කලමනාකරණය --- 🔐
 # =====================================================================================================
 
 DB_FILE = "users.db"
@@ -140,7 +138,6 @@ CHAT_DIR = "user_chats"
 if not os.path.exists(CHAT_DIR):
     os.makedirs(CHAT_DIR)
 
-# --- දත්ත සමුදාය පිහිටුවීම ---
 def get_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     return conn
@@ -160,17 +157,14 @@ def init_db():
     conn.commit()
     conn.close()
 
-# SQLite Database එක initialize කරන්න
 init_db()
 
-# --- Password Hash කිරීම සහ සැසඳීම ---
 def hash_password(password):
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def check_password(password, hashed_password):
     return bcrypt.checkpw(password.encode(), hashed_password.encode())
 
-# --- පරිශීලක කාර්යයන් ---
 def add_user(email, phone, password):
     conn = get_db()
     cursor = conn.cursor()
@@ -182,7 +176,7 @@ def add_user(email, phone, password):
         return True
     except sqlite3.IntegrityError:
         conn.close()
-        return False # Email එක දැනටමත් තිබේ
+        return False
 
 def verify_user(email, password):
     conn = get_db()
@@ -202,7 +196,6 @@ def find_user_by_email(email):
     conn.close()
     return result
 
-# --- ඇඩ්මින් කාර්යයන් ---
 def get_all_users_for_admin():
     if not st.session_state.is_admin:
         return []
@@ -219,7 +212,6 @@ def delete_user_by_id(user_id):
     conn = get_db()
     cursor = conn.cursor()
     
-    # පරණ chat ෆෝල්ඩරය මකා දැමීම සදහා ඊමේල් එක හොයන්න
     cursor.execute("SELECT email FROM users WHERE id=?", (user_id,))
     email_res = cursor.fetchone()
     if email_res:
@@ -235,7 +227,6 @@ def delete_user_by_id(user_id):
     conn.close()
     return True
 
-# --- MULTI-CHAT MEMORY SYSTEM ---
 def get_user_dir(email):
     safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
     user_dir = os.path.join(CHAT_DIR, safe_email)
@@ -255,14 +246,13 @@ def save_chat(email, chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- LOGIN/REGISTRATION/ADMIN SESSION MANAGEMENT ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
     st.session_state.is_admin = False
 
 # =====================================================================================================
-# 🚪 --- UI: පිවිසුම් / ලියාපදිංචි / ඇඩ්මින් ද්වාරය --- 🚪
+# 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
 # =====================================================================================================
 
 if not st.session_state.logged_in:
@@ -271,7 +261,6 @@ if not st.session_state.logged_in:
     
     tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "👀 පරණ විස්තර සොයන්න"])
 
-    # 1. Login Tab
     with tab1:
         st.subheader("ඇප් එකට පිවිසෙන්න")
         with st.form("login_form"):
@@ -281,14 +270,12 @@ if not st.session_state.logged_in:
             
             if submitted:
                 if login_email and login_password:
-                    # ✅ ඇඩ්මින් පිවිසුම (Tab එක නැතිව Email/Pass එකෙන් විතරක් යන්න)
                     if login_email.lower() == "admin@hacx.lk" and login_password == "1234":
                          st.session_state.logged_in = True
                          st.session_state.user_email = login_email
                          st.session_state.is_admin = True
                          st.session_state.current_chat_id = str(uuid.uuid4())
                          st.session_state.messages = []
-                         st.success("👨‍💻 ඇඩ්මින් ලෙස සාර්ථකව පිවිසුණා.")
                          st.rerun()
                     
                     user = verify_user(login_email, login_password)
@@ -296,17 +283,14 @@ if not st.session_state.logged_in:
                         st.session_state.logged_in = True
                         st.session_state.user_email = user["email"]
                         st.session_state.is_admin = user["is_admin"] == 1
-                        
                         st.session_state.current_chat_id = str(uuid.uuid4())
                         st.session_state.messages = []
-                        st.success("✅ සාර්ථකව පිවිසුණා.")
                         st.rerun()
                     else:
                         st.error("⚠️ ඔබගේ Email ලිපිනය හෝ මුරපදය වැරදියි.")
                 else:
                     st.warning("⚠️ කරුණාකර සියලුම තොරතුරු ඇතුලත් කරන්න.")
 
-    # 2. Registration Tab
     with tab2:
         st.subheader("අලුත් එකවුන්ට් එකක් සාදන්න")
         with st.form("reg_form"):
@@ -330,7 +314,6 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("⚠️ කරුණාකර සියලුම විස්තර පුරවන්න.")
 
-    # 3. Forgot Password Tab
     with tab3:
         st.subheader("විස්තර අමතක නම්...")
         st.info("ඔබගේ විස්තර අමතක නම්, කරුණාකර 'ඇඩ්මින්' වෙත දන්වා එය විසඳා ගන්න.")
@@ -349,12 +332,13 @@ if not st.session_state.logged_in:
     st.stop() 
 
 # =====================================================================================================
-# 🖥️ --- ඇප් එකේ ප්‍රධාන UI සහ SIDEBAR (Login වුණාට පසු පෙනෙන) --- 🖥️
+# 🖥️ --- ඇප් එකේ ප්‍රධාන UI (Login වුණාට පසු) --- 🖥️
 # =====================================================================================================
 
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2024 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
+# --- Sidebar එකේ සැකසුම් ---
 user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
@@ -366,53 +350,6 @@ if sidebar_root.button("➕ අලුත් චැට් එකක් (New Chat)
     st.session_state.current_chat_id = str(uuid.uuid4())
     st.session_state.messages = []
     st.rerun()
-
-# -----------------------------------------------------------------------------------------------------
-# 👨‍💻 --- ADMIN PANEL SIDEBAR NAVIGATION --- 👨‍💻
-# -----------------------------------------------------------------------------------------------------
-show_admin_panel = False
-if st.session_state.is_admin:
-    sidebar_root.divider()
-    sidebar_root.header("👨‍💻 Admin Panel")
-    if sidebar_root.button("👥 Manage Users", use_container_width=True):
-        show_admin_panel = True
-    sidebar_root.divider()
-
-# -----------------------------------------------------------------------------------------------------
-# --- ADMIN PANEL DISPLAY LOGIC ---
-# -----------------------------------------------------------------------------------------------------
-if st.session_state.is_admin and show_admin_panel:
-    st.markdown("---")
-    st.header("👨‍💻 පරිශීලක කළමනාකරණය")
-    users = get_all_users_for_admin()
-    
-    if not users:
-        st.info("පරිශීලකයින් හමු නොවීය (හෝ Admin හැර වෙනත් කවුරුත් නැත).")
-    else:
-        for user_id, email, phone in users:
-            if email.lower() == "admin@hacx.lk":
-                 continue
-                 
-            with st.container():
-                st.write(f"**ID:** {user_id} | **Email:** {email} | **Phone:** {phone}")
-                col1, col2 = st.columns([1, 4])
-                with col1:
-                    if st.button("🗑️ Delete", key=f"del_{user_id}", type="secondary"):
-                        if delete_user_by_id(user_id):
-                            st.success(f"✅ පරිශීලකයා ({email}) මකා දැමීම සාර්ථකයි.")
-                            st.rerun()
-                        else:
-                            st.error("⚠️ පරිශීලකයා මකා දැමීම අසාර්ථකයි.")
-                with col2:
-                    st.empty()
-                st.markdown("---")
-    
-    st.info("💡 ඇඩ්මින් පැනලය සාර්ථකව පෙන්වන ලදී. නැවත Chat එකට යාමට, 'Manage Users' බොත්තම ඔබන්න. ඔබ මේ වන විට Admin Panel එකේ සිටී.")
-    st.stop()
-
-# -----------------------------------------------------------------------------------------------------
-# --- MAIN CHAT UI ---
-# -----------------------------------------------------------------------------------------------------
 
 with sidebar_root:
     st.markdown("### 💬 Your Chats")
@@ -450,108 +387,141 @@ with sidebar_root:
         st.rerun()
 
 # -----------------------------------------------------------------------------------------------------
+# 🔥 --- ඇඩ්මින් නම් TABS පෙන්වීම --- 🔥
+# -----------------------------------------------------------------------------------------------------
+
+if st.session_state.is_admin:
+    tab_chat, tab_admin = st.tabs(["💬 AI චැට්", "👨‍💻 Admin Panel"])
+else:
+    # සාමාන්‍ය කෙනෙක්ට Tab පේන්නේ නෑ, කෙලින්ම චැට් එක විතරයි
+    tab_chat = st.container()
+    tab_admin = None
+
+# --- Admin Panel Logic ---
+if tab_admin is not None:
+    with tab_admin:
+        st.header("👨‍💻 පරිශීලක කළමනාකරණය")
+        users = get_all_users_for_admin()
+        
+        if not users:
+            st.info("පරිශීලකයින් හමු නොවීය.")
+        else:
+            for user_id, email, phone in users:
+                if email.lower() == "admin@hacx.lk":
+                     continue
+                     
+                with st.container():
+                    st.write(f"**ID:** {user_id} | **Email:** {email} | **Phone:** {phone}")
+                    if st.button("🗑️ Delete", key=f"del_{user_id}", type="secondary"):
+                        if delete_user_by_id(user_id):
+                            st.success(f"✅ පරිශීලකයා ({email}) මකා දැමීම සාර්ථකයි.")
+                            st.rerun()
+                        else:
+                            st.error("⚠️ පරිශීලකයා මකා දැමීම අසාර්ථකයි.")
+                    st.markdown("---")
+
+# -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
 
-if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-    st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
+with tab_chat:
+    if "messages" not in st.session_state or len(st.session_state.messages) == 0:
+        st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if "attachments" in message:
-            for att in message["attachments"]:
-                raw_bytes = base64.b64decode(att["data"])
-                if att["type"].startswith("image/"): st.image(raw_bytes)
-                elif att["type"].startswith("video/"): st.video(raw_bytes)
-                elif att["type"].startswith("audio/"): st.audio(raw_bytes)
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if "attachments" in message:
+                for att in message["attachments"]:
+                    raw_bytes = base64.b64decode(att["data"])
+                    if att["type"].startswith("image/"): st.image(raw_bytes)
+                    elif att["type"].startswith("video/"): st.video(raw_bytes)
+                    elif att["type"].startswith("audio/"): st.audio(raw_bytes)
 
-# --- MULTIMODAL ATTACHMENTS ---
-with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
-    uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
-    st.markdown("---")
-    voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
+    with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
+        uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
+        st.markdown("---")
+        voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
 
-# --- CHAT LOGIC ---
-if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
-    attachments = []
-    active_parts = [{"text": prompt}]
-    
-    if uploaded_file:
-        file_bytes = uploaded_file.getvalue()
-        b64_data = base64.b64encode(file_bytes).decode("utf-8")
-        attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
-        active_parts.append({"inline_data": {"mime_type": uploaded_file.type, "data": b64_data}})
+    if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
+        attachments = []
+        active_parts = [{"text": prompt}]
         
-    if voice_file:
-        voice_bytes = voice_file.getvalue()
-        b64_data = base64.b64encode(voice_bytes).decode("utf-8")
-        attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
-        active_parts.append({"inline_data": {"mime_type": voice_file.type, "data": b64_data}})
-        
-    st.session_state.active_parts = active_parts
-    
-    with st.chat_message("user"):
-        st.markdown(prompt)
         if uploaded_file:
-            if uploaded_file.type.startswith("image/"): st.image(file_bytes)
-            elif uploaded_file.type.startswith("video/"): st.video(file_bytes)
+            file_bytes = uploaded_file.getvalue()
+            b64_data = base64.b64encode(file_bytes).decode("utf-8")
+            attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+            active_parts.append({"inline_data": {"mime_type": uploaded_file.type, "data": b64_data}})
+            
         if voice_file:
-            st.audio(voice_bytes)
+            voice_bytes = voice_file.getvalue()
+            b64_data = base64.b64encode(voice_bytes).decode("utf-8")
+            attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
+            active_parts.append({"inline_data": {"mime_type": voice_file.type, "data": b64_data}})
             
-    new_msg = {"role": "user", "content": prompt}
-    if attachments:
-        new_msg["attachments"] = attachments
+        st.session_state.active_parts = active_parts
         
-    st.session_state.messages.append(new_msg)
-    save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            if uploaded_file:
+                if uploaded_file.type.startswith("image/"): st.image(file_bytes)
+                elif uploaded_file.type.startswith("video/"): st.video(file_bytes)
+            if voice_file:
+                st.audio(voice_bytes)
+                
+        new_msg = {"role": "user", "content": prompt}
+        if attachments:
+            new_msg["attachments"] = attachments
+            
+        st.session_state.messages.append(new_msg)
+        save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
 
-    if not api_key:
-        st.error("⚠️ කරුණාකර Sidebar එකෙන් API Key එක ඇතුලත් කරන්න.")
-        st.stop()
+        if not api_key:
+            st.error("⚠️ කරුණාකර Sidebar එකෙන් API Key එක ඇතුලත් කරන්න.")
+            st.stop()
 
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            
+            try:
+                clean_key = api_key.strip()
+                try:
+                    if not os.path.exists(Config.ENV_FILE):
+                         with open(Config.ENV_FILE, 'w') as f: f.write("")
+                    set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
+                    Config.ACTIVE_PROVIDER = provider
+                    Config.ACTIVE_MODEL = model
+                    
+                    brain = HacxBrain(clean_key)
+                    brain.model = model 
+                    
+                    generator = brain.chat(prompt)
+                    for chunk in generator:
+                        full_response += chunk
+                        message_placeholder.markdown(full_response + "▌")
+                except NameError:
+                    brain = NativeGeminiCompletions(clean_key)
+                    res = brain.create(model, st.session_state.messages, stream=False)
+                    full_response = res.choices[0].delta.content
+                    message_placeholder.markdown(full_response)
+                    
+                try:
+                    trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+                    trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
+                    trans_res = requests.post(trans_url, json=trans_payload).json()
+                    final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
+                    message_placeholder.markdown(final_response)
+                    full_response = final_response
+                except:
+                    message_placeholder.markdown(full_response)
+                
+            except Exception as e:
+                st.error(f"❌ {e}")
+                full_response = str(e)
+                
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
-        try:
-            clean_key = api_key.strip()
-            try:
-                if not os.path.exists(Config.ENV_FILE):
-                     with open(Config.ENV_FILE, 'w') as f: f.write("")
-                set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
-                Config.ACTIVE_PROVIDER = provider
-                Config.ACTIVE_MODEL = model
-                
-                brain = HacxBrain(clean_key)
-                brain.model = model 
-                
-                generator = brain.chat(prompt)
-                for chunk in generator:
-                    full_response += chunk
-                    message_placeholder.markdown(full_response + "▌")
-            except NameError:
-                brain = NativeGeminiCompletions(clean_key)
-                res = brain.create(model, st.session_state.messages, stream=False)
-                full_response = res.choices[0].delta.content
-                message_placeholder.markdown(full_response)
-                
-            try:
-                trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
-                trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
-                trans_res = requests.post(trans_url, json=trans_payload).json()
-                final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
-                message_placeholder.markdown(final_response)
-                full_response = final_response
-            except:
-                message_placeholder.markdown(full_response)
-            
-        except Exception as e:
-            st.error(f"❌ {e}")
-            full_response = str(e)
-            
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
-    save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
-    
-    if len(st.session_state.messages) == 2: 
-        st.rerun()
+        if len(st.session_state.messages) == 2: 
+            st.rerun()
