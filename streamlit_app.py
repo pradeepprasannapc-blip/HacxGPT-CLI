@@ -77,16 +77,26 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 Safe UI CSS (ආරක්ෂිතව Hide කිරීම) 🔥 ---
+# 🔥 Secrets වලින් Admin විස්තර ගැනීම (GitHub එකේ පේන්නේ නෑ) 🔥
+try:
+    ADMIN_EMAIL = st.secrets["ADMIN_EMAIL"]
+    ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
+except KeyError:
+    # Secrets දාලා නැත්නම් Default දේවල් ගනී (ආරක්ෂාවට Secrets දාන්නම ඕනේ)
+    ADMIN_EMAIL = "admin@hacx.lk"
+    ADMIN_PASSWORD = "1234"
+
+# --- 🔥 UI CSS (අභ්‍යන්තර මෙනු සැඟවීම පමණක් සිදු කරයි) 🔥 ---
 st.markdown("""
 <style>
+/* Main Streamlit internal elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 footer { display: none !important; visibility: hidden !important; }
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
-#st-deck-go-action-floating { display: none !important; }
-.block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
+
+/* Spacing Fix */
+.block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Title Styling */
@@ -187,21 +197,14 @@ def find_user_by_email(email):
     return result
 
 def get_all_users_for_admin():
+    if st.session_state.user_role == 0:
+        return []
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, email, phone, password, is_admin FROM users")
     result = cursor.fetchall()
     conn.close()
     return result
-
-def get_users_by_roles(roles):
-    conn = get_db()
-    cursor = conn.cursor()
-    placeholders = ','.join('?' for _ in roles)
-    cursor.execute(f"SELECT email FROM users WHERE is_admin IN ({placeholders})", roles)
-    res = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return res
 
 def delete_user_by_id(user_id):
     if st.session_state.user_role != 1: 
@@ -242,7 +245,7 @@ def update_user_role(user_id, role_int):
     conn.close()
     return True
 
-# --- 📩 සර්වසම්පූර්ණ Inbox/Notification System ---
+# --- 📩 Inbox/Notification System ---
 def add_notification(target_email, message):
     conn = get_db()
     cursor = conn.cursor()
@@ -250,7 +253,15 @@ def add_notification(target_email, message):
     conn.commit()
     conn.close()
 
-def get_my_notifications(email):
+def get_admin_notifications():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, message FROM notifications WHERE email='admin' ORDER BY id DESC")
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def get_user_notifications(email):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, message FROM notifications WHERE email=? ORDER BY id DESC", (email.lower(),))
@@ -310,8 +321,8 @@ if not st.session_state.logged_in:
             
             if submitted:
                 if login_email and login_password:
-                    # Super Admin Master Login
-                    if login_email.lower() == "admin@hacx.lk" and login_password == "1234":
+                    # 🔥 Secrets වලින් ගත්තු Admin ලොගින් එක 🔥
+                    if login_email.lower() == ADMIN_EMAIL.lower() and login_password == ADMIN_PASSWORD:
                          st.session_state.logged_in = True
                          st.session_state.user_email = login_email
                          st.session_state.user_role = 1
@@ -366,14 +377,8 @@ if not st.session_state.logged_in:
                 user_info = find_user_by_email(check_email)
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
-                    
-                    # සියලුම Admins ලට පණිවිඩය යැවීම
-                    admins = get_users_by_roles([1, 2])
-                    for adm in admins:
-                        add_notification(adm, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
-                    
-                    st.success("✅ ඇඩ්මින්වරුන් වෙත පණිවිඩයක් යවන ලදී!")
-                    st.toast("✅ පණිවිඩය යැව්වා!", icon="🚀")
+                    add_notification("admin", f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    st.success("✅ ඇඩ්මින් වෙත පණිවිඩයක් යවන ලදී!")
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
 
@@ -386,8 +391,11 @@ if not st.session_state.logged_in:
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
-# 🔥 සනිකව පණිවිඩ පෙන්වීමේ Alert එක 🔥
-my_notifications = get_my_notifications(st.session_state.user_email)
+my_notifications = []
+if st.session_state.user_role in [1, 2]:
+    my_notifications = get_admin_notifications()
+else:
+    my_notifications = get_user_notifications(st.session_state.user_email)
 
 if my_notifications:
     st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා කරන්න.")
@@ -400,7 +408,7 @@ chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), rever
 is_admin_or_mod = st.session_state.user_role in [1, 2]
 
 if is_admin_or_mod:
-    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 ඇඩ්මින් පැනලය"])
+    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 ඇඩ්මින්"])
     tab_support = None
 else:
     tab_chat, tab_history, tab_settings, tab_support = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "🎧 සහය සහ පණිවිඩ"])
@@ -479,19 +487,15 @@ if tab_support is not None:
             user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=100)
             if st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True):
                 if user_message.strip():
-                    # සියලුම Admins ලට පණිවිඩය යැවීම
-                    admins = get_users_by_roles([1, 2])
-                    for adm in admins:
-                        add_notification(adm, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
+                    add_notification("admin", f"💬 {st.session_state.user_email} ගෙන්: {user_message}")
                     st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
-                    st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
 # --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
-        st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
+        st.markdown("### 🔔 පරිශීලක පණිවිඩ (Inbox)")
         if not my_notifications:
             st.info("අලුත් පණිවිඩ නොමැත.")
         else:
@@ -504,41 +508,24 @@ if tab_admin is not None:
         st.divider()
         
         users = get_all_users_for_admin()
-        all_emails = [u[1] for u in users if u[1].lower() != "admin@hacx.lk"]
         
-        st.markdown("### 📢 පණිවිඩ යවන්න (Send Message)")
+        st.markdown("### 📢 පරිශීලකයන්ට පණිවිඩ යවන්න (Send Message)")
         with st.form("admin_msg_form"):
-            target_options = [
-                "All Users & Admins (හැමෝටම)", 
-                "Users ලට පමණක් (Users Only)", 
-                "Admins/Mods ලට පමණක් (Admins Only)"
-            ] + all_emails
-            
-            target_audience = st.selectbox("කාටද යවන්නේ? (To)", target_options)
+            user_emails = [u[1] for u in users if u[1].lower() != ADMIN_EMAIL.lower()]
+            target_audience = st.selectbox("කාටද යවන්නේ? (To)", ["All Users (හැමෝටම)"] + user_emails)
             admin_msg = st.text_area("පණිවිඩය ලියන්න...", height=100)
             
             if st.form_submit_button("📤 පණිවිඩය යවන්න", use_container_width=True):
                 if not admin_msg.strip():
                     st.warning("පණිවිඩයක් ලියන්න.")
                 else:
-                    targets = []
-                    if target_audience == "All Users & Admins (හැමෝටම)":
-                        targets = get_users_by_roles([0, 1, 2])
-                    elif target_audience == "Users ලට පමණක් (Users Only)":
-                        targets = get_users_by_roles([0])
-                    elif target_audience == "Admins/Mods ලට පමණක් (Admins Only)":
-                        targets = get_users_by_roles([1, 2])
+                    if target_audience == "All Users (හැමෝටම)":
+                        for email in user_emails:
+                            add_notification(email, f"📢 Admin පණිවිඩය: {admin_msg}")
+                        st.toast("✅ සියලු දෙනාටම පණිවිඩය යැව්වා!", icon="🚀")
                     else:
-                        targets = [target_audience]
-                        
-                    sender_label = "Super Admin" if st.session_state.user_role == 1 else "Moderator"
-                    full_msg = f"📢 [{sender_label} පණිවිඩය]\n{admin_msg}"
-                    
-                    for t in targets:
-                        add_notification(t, full_msg)
-                        
-                    st.toast(f"✅ පණිවිඩය යැව්වා!", icon="🚀")
-                    st.success(f"✅ පණිවිඩය සාර්ථකව යවන ලදී!")
+                        add_notification(target_audience, f"📢 Admin පණිවිඩය: {admin_msg}")
+                        st.toast(f"✅ {target_audience} වෙත පණිවිඩය යැව්වා!", icon="🚀")
 
         st.divider()
         
@@ -547,7 +534,7 @@ if tab_admin is not None:
             st.info("පරිශීලකයින් හමු නොවීය.")
         else:
             for user_id, email, phone, password, role_int in users:
-                if email.lower() == "admin@hacx.lk": continue
+                if email.lower() == ADMIN_EMAIL.lower(): continue
                 
                 role_label = "User"
                 if role_int == 1: role_label = "Admin"
