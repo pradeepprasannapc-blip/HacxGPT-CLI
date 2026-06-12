@@ -501,7 +501,7 @@ with tab_settings:
     input_api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password", value=st.session_state.saved_api_key)
 
     if provider == "gemini":
-        gemini_models = ["gemini-2.5-pro", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-8b"]
+        gemini_models = ["gemini-2.5-flash", "gemini-3.1-pro", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-2.5-flash-8b"]
         model = st.selectbox("Select Gemini Model", gemini_models)
     else:
         model = st.text_input("Model Name", value="gpt-3.5-turbo")
