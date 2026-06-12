@@ -77,21 +77,17 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 Safe UI CSS (ආරක්ෂිතව Hide කිරීම) 🔥 ---
+# --- 🔥 UI CSS (අභ්‍යන්තර මෙනු සැඟවීම පමණක් සිදු කරයි) 🔥 ---
 st.markdown("""
 <style>
-/* Main Streamlit elements */
+/* Main Streamlit internal elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 footer { display: none !important; visibility: hidden !important; }
 
-/* Safe hiding for internal deploy buttons */
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
-#st-deck-go-action-floating { display: none !important; }
-
 /* Spacing Fix */
-.block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
+.block-container { padding-top: 1.5rem !important; padding-bottom: 5rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Title Styling */
@@ -485,6 +481,7 @@ if tab_support is not None:
                 if user_message.strip():
                     add_notification("admin", f"💬 {st.session_state.user_email} ගෙන්: {user_message}")
                     st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
+                    st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
@@ -519,9 +516,11 @@ if tab_admin is not None:
                         for email in user_emails:
                             add_notification(email, f"📢 Admin පණිවිඩය: {admin_msg}")
                         st.toast("✅ සියලු දෙනාටම පණිවිඩය යැව්වා!", icon="🚀")
+                        st.success("✅ සියලු දෙනාටම පණිවිඩය යවන ලදී!")
                     else:
                         add_notification(target_audience, f"📢 Admin පණිවිඩය: {admin_msg}")
                         st.toast(f"✅ {target_audience} වෙත පණිවිඩය යැව්වා!", icon="🚀")
+                        st.success(f"✅ {target_audience} වෙත පණිවිඩය යවන ලදී!")
 
         st.divider()
         
