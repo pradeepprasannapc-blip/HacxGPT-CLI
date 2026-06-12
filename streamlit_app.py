@@ -77,29 +77,26 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 UI & Modern CSS Styling (Manage App බලෙන් සැඟවීම) 🔥 ---
+# --- 🔥 UI & Manage App Hiding CSS 🔥 ---
 st.markdown("""
 <style>
-/* Streamlit UI elements hide */
+/* Main Streamlit elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
 footer { display: none !important; visibility: hidden !important; }
 
-/* 🔥 Streamlit Cloud 'Manage App' badge Aggressive Hiding */
-.viewerBadge_container__1QSob { display: none !important; visibility: hidden !important; opacity: 0 !important; }
-.viewerBadge_link__1S137 { display: none !important; }
-[data-testid="stAppDeployButton"] { display: none !important; visibility: hidden !important; }
-[data-testid="manage-app-button"] { display: none !important; }
-.stDeployButton { display: none !important; }
-div[class^="viewerBadge"] { display: none !important; }
-div[class^="ManageApp"] { display: none !important; }
+/* 🔥 Extreme hiding for 'Manage App' and deploy badges */
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; }
+iframe[title="streamlitApp"] { padding-bottom: 0 !important; }
+#st-deck-go-action-floating, div[class^="viewerBadge"], div[class^="ManageApp"] { display: none !important; }
 
 /* Spacing Fix */
 .block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
-/* Modern Gradient Title */
+/* Title Styling */
 .hacx-title {
     text-align: center;
     background: linear-gradient(90deg, #ff4b4b, #ff904f, #ff4b4b);
@@ -108,22 +105,12 @@ code { font-family: 'Courier New', Courier, monospace !important; font-size: 14p
     -webkit-text-fill-color: transparent;
     font-size: 3.2em;
     font-weight: 900;
-    letter-spacing: 1px;
     margin-bottom: 0px;
     padding-bottom: 0px;
     animation: shine 3s linear infinite;
 }
-@keyframes shine {
-    to { background-position: 200% center; }
-}
-.hacx-subtitle {
-    text-align: center;
-    color: #a0a0a0;
-    font-size: 14px;
-    font-weight: 500;
-    margin-top: -5px;
-    margin-bottom: 30px;
-}
+@keyframes shine { to { background-position: 200% center; } }
+.hacx-subtitle { text-align: center; color: #a0a0a0; font-size: 14px; margin-top: -5px; margin-bottom: 30px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,8 +137,7 @@ if not os.path.exists(CHAT_DIR):
     os.makedirs(CHAT_DIR)
 
 def get_db():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    return conn
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
 
 def init_db():
     conn = get_db()
@@ -162,9 +148,10 @@ def init_db():
             email TEXT UNIQUE NOT NULL,
             phone TEXT NOT NULL,
             password TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 0
+            is_admin INTEGER DEFAULT 0 
         )
     """)
+    # is_admin: 0 = User, 1 = Admin, 2 = Moderator
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,7 +183,7 @@ def verify_user(email, password):
     result = cursor.fetchone()
     conn.close()
     if result and result[1] == password:
-        return {"email": result[0], "is_admin": result[2]}
+        return {"email": result[0], "role_int": result[2]}
     return None
 
 def find_user_by_email(email):
@@ -208,17 +195,17 @@ def find_user_by_email(email):
     return result
 
 def get_all_users_for_admin():
-    if not st.session_state.is_admin:
+    if st.session_state.user_role == 0:
         return []
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, phone, password FROM users")
+    cursor.execute("SELECT id, email, phone, password, is_admin FROM users")
     result = cursor.fetchall()
     conn.close()
     return result
 
 def delete_user_by_id(user_id):
-    if not st.session_state.is_admin:
+    if st.session_state.user_role != 1: # Only Super Admin can delete
         return False
     conn = get_db()
     cursor = conn.cursor()
@@ -237,7 +224,7 @@ def delete_user_by_id(user_id):
     return True
 
 def update_user_password(user_id, new_password):
-    if not st.session_state.is_admin:
+    if st.session_state.user_role == 0:
         return False
     conn = get_db()
     cursor = conn.cursor()
@@ -246,17 +233,37 @@ def update_user_password(user_id, new_password):
     conn.close()
     return True
 
-def add_notification(email, message):
+def update_user_role(user_id, role_int):
+    if st.session_state.user_role != 1: # Only Super Admin can assign roles
+        return False
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO notifications (email, message) VALUES (?, ?)", (email.lower(), message))
+    cursor.execute("UPDATE users SET is_admin=? WHERE id=?", (role_int, user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+# --- 📩 අලුත් Inbox/Notification System ---
+def add_notification(target_email, message):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO notifications (email, message) VALUES (?, ?)", (target_email.lower(), message))
     conn.commit()
     conn.close()
 
-def get_notifications():
+def get_admin_notifications():
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, message FROM notifications ORDER BY id DESC")
+    # ADMIN කියලා තියෙන ඒවා විතරක් ගනී
+    cursor.execute("SELECT id, message FROM notifications WHERE email='ADMIN' ORDER BY id DESC")
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def get_user_notifications(email):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, message FROM notifications WHERE email=? ORDER BY id DESC", (email.lower(),))
     result = cursor.fetchall()
     conn.close()
     return result
@@ -268,6 +275,7 @@ def delete_notification(notif_id):
     conn.commit()
     conn.close()
 
+# --- Chat Memory ---
 def get_user_dir(email):
     safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
     user_dir = os.path.join(CHAT_DIR, safe_email)
@@ -290,9 +298,7 @@ def save_chat(email, chat_id, messages):
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
-    st.session_state.is_admin = False
-
-if "saved_api_key" not in st.session_state:
+    st.session_state.user_role = 0 # 0=User, 1=Admin, 2=Mod
     st.session_state.saved_api_key = ""
 
 # =====================================================================================================
@@ -314,10 +320,11 @@ if not st.session_state.logged_in:
             
             if submitted:
                 if login_email and login_password:
+                    # Super Admin Master Login
                     if login_email.lower() == "admin@hacx.lk" and login_password == "1234":
                          st.session_state.logged_in = True
                          st.session_state.user_email = login_email
-                         st.session_state.is_admin = True
+                         st.session_state.user_role = 1
                          st.session_state.current_chat_id = str(uuid.uuid4())
                          st.session_state.messages = []
                          st.rerun()
@@ -326,7 +333,7 @@ if not st.session_state.logged_in:
                     if user:
                         st.session_state.logged_in = True
                         st.session_state.user_email = user["email"]
-                        st.session_state.is_admin = user["is_admin"] == 1
+                        st.session_state.user_role = user["role_int"]
                         st.session_state.current_chat_id = str(uuid.uuid4())
                         st.session_state.messages = []
                         st.rerun()
@@ -369,7 +376,7 @@ if not st.session_state.logged_in:
                 user_info = find_user_by_email(check_email)
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
-                    add_notification(check_email, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    add_notification("ADMIN", f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
                     st.success("✅ ඇඩ්මින් වෙත පණිවිඩයක් යවන ලදී! ඇඩ්මින් විසින් ඔබගේ දුරකථනයට හෝ ඊමේල් එකට සම්බන්ධ වනු ඇත.")
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
@@ -387,11 +394,14 @@ user_dir = get_user_dir(st.session_state.user_email)
 chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
 chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
 
-if st.session_state.is_admin:
-    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 චැට් ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 Admin Panel"])
+# --- Role Based Tabs ---
+is_admin_or_mod = st.session_state.user_role in [1, 2]
+
+if is_admin_or_mod:
+    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 ඇඩ්මින්"])
     tab_support = None
 else:
-    tab_chat, tab_history, tab_settings, tab_support = st.tabs(["💬 AI චැට්", "📝 චැට් ඉතිහාසය", "⚙️ සැකසුම්", "🎧 සහය (Support)"])
+    tab_chat, tab_history, tab_settings, tab_support = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "🎧 සහය සහ පණිවිඩ"])
     tab_admin = None
 
 # --- 📝 CHAT HISTORY TAB ---
@@ -418,12 +428,15 @@ with tab_history:
 
 # --- ⚙️ SETTINGS TAB ---
 with tab_settings:
-    st.markdown(f"### 👤 Welcome {st.session_state.user_email.split('@')[0]}!")
+    role_name = "User"
+    if st.session_state.user_role == 1: role_name = "Super Admin"
+    elif st.session_state.user_role == 2: role_name = "Moderator"
+    
+    st.markdown(f"### 👤 Welcome {st.session_state.user_email.split('@')[0]}! (`{role_name}`)")
     st.divider()
     st.header("🔑 API & Model Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     
-    # 🔥 අලුත්: API Key Save Button එක
     input_api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password", value=st.session_state.saved_api_key)
 
     if provider == "gemini":
@@ -440,73 +453,129 @@ with tab_settings:
     if st.button("🚪 Logout (ඉවත් වන්න)", use_container_width=True, type="secondary"):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
-        st.session_state.is_admin = False
+        st.session_state.user_role = 0
         st.session_state.messages = []
         st.rerun()
 
-# --- 🎧 SUPPORT TAB ---
+# --- 🎧 SUPPORT & INBOX TAB (For Users) ---
 if tab_support is not None:
     with tab_support:
+        # User Inbox
+        st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
+        user_notifs = get_user_notifications(st.session_state.user_email)
+        if not user_notifs:
+            st.info("ඔබට අලුත් පණිවිඩ නොමැත.")
+        else:
+            for n_id, n_msg in user_notifs:
+                with st.container(border=True):
+                    st.warning(n_msg)
+                    if st.button("✓ කියෙව්වා (Clear)", key=f"unotif_{n_id}"):
+                        delete_notification(n_id)
+                        st.rerun()
+        st.divider()
+        
+        # User to Admin Form
         st.markdown("### 🎧 ඇඩ්මින්ට පණිවිඩයක් යවන්න")
-        st.info("ඔබට ඇප් එකේ ප්‍රශ්නයක් තියෙනවා නම් හෝ ඇඩ්මින්ගෙන් යමක් දැනගැනීමට අවශ්‍ය නම් පහතින් යවන්න.")
         with st.form("support_form"):
-            user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=150)
-            submitted_msg = st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True)
-            if submitted_msg:
+            user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=100)
+            if st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True):
                 if user_message.strip():
-                    add_notification(st.session_state.user_email, f"💬 පණිවිඩයක්: {user_message}")
+                    add_notification("ADMIN", f"💬 {st.session_state.user_email} ගෙන්: {user_message}")
                     st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
-# --- 👨‍💻 ADMIN PANEL TAB ---
+# --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
-        st.markdown("### 🔔 පරිශීලක පණිවිඩ සහ ගැටලු")
-        notifications = get_notifications()
-        if not notifications:
+        # Admin Inbox
+        st.markdown("### 🔔 පරිශීලක පණිවිඩ (Inbox)")
+        admin_notifs = get_admin_notifications()
+        if not admin_notifs:
             st.info("අලුත් පණිවිඩ නොමැත.")
         else:
-            for n_id, n_email, n_msg in notifications:
+            for n_id, n_msg in admin_notifs:
                 with st.container(border=True):
-                    st.caption(f"📩 From: {n_email}")
                     st.warning(n_msg)
                     if st.button("✓ විසඳුවා (Clear)", key=f"notif_{n_id}"):
                         delete_notification(n_id)
                         st.rerun()
-                        
         st.divider()
-        st.markdown("### 👥 පරිශීලක කළමනාකරණය")
+        
         users = get_all_users_for_admin()
         
+        # Admin sending message to users
+        st.markdown("### 📢 පරිශීලකයන්ට පණිවිඩ යවන්න (Send Message)")
+        with st.form("admin_msg_form"):
+            user_emails = [u[1] for u in users if u[1].lower() != "admin@hacx.lk"]
+            target_audience = st.selectbox("කාටද යවන්නේ? (To)", ["All Users (හැමෝටම)"] + user_emails)
+            admin_msg = st.text_area("පණිවිඩය ලියන්න...", height=100)
+            
+            if st.form_submit_button("📤 පණිවිඩය යවන්න", use_container_width=True):
+                if not admin_msg.strip():
+                    st.warning("පණිවිඩයක් ලියන්න.")
+                else:
+                    if target_audience == "All Users (හැමෝටම)":
+                        for email in user_emails:
+                            add_notification(email, f"📢 Admin පණිවිඩය: {admin_msg}")
+                        st.success("✅ සියලු දෙනාටම පණිවිඩය යවන ලදී!")
+                    else:
+                        add_notification(target_audience, f"📢 Admin පණිවිඩය: {admin_msg}")
+                        st.success(f"✅ {target_audience} වෙත පණිවිඩය යවන ලදී!")
+
+        st.divider()
+        
+        # User Management 
+        st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         if not users:
             st.info("පරිශීලකයින් හමු නොවීය.")
         else:
-            for user_id, email, phone, password in users:
-                if email.lower() == "admin@hacx.lk":
-                     continue
-                with st.expander(f"👤 {email}"):
+            for user_id, email, phone, password, role_int in users:
+                if email.lower() == "admin@hacx.lk": continue
+                
+                role_label = "User"
+                if role_int == 1: role_label = "Admin"
+                elif role_int == 2: role_label = "Moderator"
+                
+                with st.expander(f"👤 {email} ({role_label})"):
                     st.write(f"**Phone Number:** {phone}")
                     st.markdown("---")
+                    
+                    # Password Edit
                     col1, col2 = st.columns([3, 1])
                     with col1:
-                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න (Edit Password)", value=password, key=f"pass_{user_id}")
+                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න", value=password, key=f"pass_{user_id}")
                     with col2:
-                        st.write("")
-                        st.write("")
+                        st.write(""); st.write("")
                         if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
                             update_user_password(user_id, new_pass)
                             st.success("මුරපදය වෙනස් කළා!")
+                    
                     st.markdown("---")
-                    if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
-                        if delete_user_by_id(user_id):
-                            st.rerun()
+                    # Roles & Delete (Only Super Admin can do this)
+                    if st.session_state.user_role == 1:
+                        col_r1, col_r2 = st.columns([3, 1])
+                        with col_r1:
+                            role_opts = {"User": 0, "Moderator": 2, "Admin": 1}
+                            curr_role_name = list(role_opts.keys())[list(role_opts.values()).index(role_int)]
+                            new_role_name = st.selectbox("තනතුර (Role)", list(role_opts.keys()), index=list(role_opts.keys()).index(curr_role_name), key=f"role_{user_id}")
+                        with col_r2:
+                            st.write(""); st.write("")
+                            if st.button("💾 Role", key=f"rsave_{user_id}", use_container_width=True):
+                                update_user_role(user_id, role_opts[new_role_name])
+                                st.success("Role වෙනස් කළා!")
+                                st.rerun()
+                                
+                        if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
+                            if delete_user_by_id(user_id):
+                                st.rerun()
+                    else:
+                        st.info("තනතුරු වෙනස් කිරීම සහ මකා දැමීම Super Admin ට පමණක් සීමා වී ඇත.")
 
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
 
-# 🔥 AI එකේ මතකයෙන් BlackTechX සහ HacxGPT මකා දමන රහස් කේතය
 def sanitize_text(text):
     text = re.sub(r'(?i)BlackTechX', 'Pradeep Hacx', text)
     text = re.sub(r'(?i)HacxGPT', 'Pradeep Hacx AI', text)
