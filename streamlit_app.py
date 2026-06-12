@@ -5,7 +5,7 @@ import json
 import uuid
 import base64
 
-# --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක (එන්ජිමට හානියක් නොවන පරිදි) 🔥 ---
+# --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
 class MockDelta:
     def __init__(self, content):
         self.content = content
@@ -29,7 +29,6 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
-        # 1. පරණ මැසේජ් හිස්ට්‍රිය සහ අලුත් ප්‍රශ්නය සාමාන්‍ය පරිදි සකස් කිරීම
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
@@ -37,13 +36,12 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
         
-        # 2. 🔥 MULTIMODAL INTERCEPTION: ෆොටෝ/වොයිස් තියෙනවා නම් එය අන්තිම මැසේජ් එකට රහසේම සම්බන්ධ කිරීම
+        # 🔥 MULTIMODAL INTERCEPTION
         if "active_parts" in st.session_state and st.session_state.active_parts:
             for item in reversed(contents):
                 if item["role"] == "user":
                     item["parts"] = st.session_state.active_parts
                     break
-            # එක පාරක් යැවූ පසු එය Clear කිරීම (පරිවර්තනයට හෝ ඊළඟ ප්‍රශ්නෙට පැටලෙන්නේ නැති වීමට)
             st.session_state.active_parts = None
         
         payload = {"contents": contents}
@@ -53,8 +51,10 @@ class NativeGeminiCompletions:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
         
-        if res.status_code != 200:
-            raise Exception(f"Google Native API Error {res.status_code}: {res.text}")
+        if res.status_code == 503:
+            raise Exception("Google සර්වර් මේ වෙලාවේ කාර්යබහුලයි (High Demand). තත්පර කිහිපයකින් නැවත උත්සාහ කරන්න.")
+        elif res.status_code != 200:
+            raise Exception(f"API Error {res.status_code}: {res.text}")
         
         text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
         return [MockResponse(text)] if stream else MockResponse(text)
@@ -69,19 +69,19 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
 
-# --- 🔥 UI Hiding Fix (Header, Footer, Toolbar) 🔥 ---
+# --- 🔥 UI Hiding Fix (Sidebar Menu ඉතිරි කර Manage App මැකීම) 🔥 ---
 st.markdown("""
 <style>
-/* අනවශ්‍ය සියලුම දේවල් මැකීම */
-[data-testid="stHeader"] { display: none !important; }
+/* Manage app සහ Deploy buttons මැකීම */
+.stAppDeployButton, .viewerBadge_container__1QSob, footer, #st-deck-go-action-floating { display: none !important; visibility: hidden !important; }
 [data-testid="stToolbar"] { display: none !important; }
-.stAppDeployButton { display: none !important; }
-footer { visibility: hidden !important; display: none !important; }
+
+/* Header එක තියාගන්නවා (Menu බට්න් එකට), හැබැයි පසුබිම clear කරනවා */
+[data-testid="stHeader"] { background-color: transparent !important; }
 
 /* ඇප් එකේ ඉඩකඩ ලස්සන කිරීම */
-.block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
+.block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
 
-/* කෝඩ් කොපි කරන කොටස පැහැදිලි කිරීම */
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -95,7 +95,6 @@ try:
     
     Security.encrypt = lambda text: text
     Security.decrypt = lambda text: text
-    # HacxBrain එන්ජිමට අලුත් කන්/ඇස් සවිකිරීම
     brain_module.Client = NativeClient
 
 except ImportError as e:
@@ -132,22 +131,16 @@ if "logged_in" not in st.session_state:
 
 if not st.session_state.logged_in:
     st.title("🔐 HacxGPT Login")
-    st.markdown("කරුණාකර ඔබගේ ගිණුමට ඇතුලත් වන්න. (ඔබගේ චැට් ඉතිහාසය සුරක්ෂිතව තබාගැනීම සඳහා)")
-    
     with st.form("login_form"):
         email_input = st.text_input("ඔබගේ Email ලිපිනය (Google Account)")
         submitted = st.form_submit_button("ඇතුලත් වන්න (Login)")
-        
-        if submitted:
-            if email_input:
-                st.session_state.logged_in = True
-                safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
-                st.session_state.user_email = safe_email
-                st.session_state.current_chat_id = str(uuid.uuid4())
-                st.session_state.messages = []
-                st.rerun()
-            else:
-                st.error("⚠️ කරුණාකර Email ලිපිනයක් ලබා දෙන්න.")
+        if submitted and email_input:
+            st.session_state.logged_in = True
+            safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
+            st.session_state.user_email = safe_email
+            st.session_state.current_chat_id = str(uuid.uuid4())
+            st.session_state.messages = []
+            st.rerun()
     st.stop()
 
 # --- MAIN APP UI & SIDEBAR ---
@@ -164,17 +157,14 @@ with st.sidebar:
         st.rerun()
         
     st.markdown("### 💬 Your Chats")
-    
     for cf in chat_files:
         chat_id = cf.replace(".json", "")
         msgs = load_chat(st.session_state.user_email, chat_id)
-        
         title = "Empty Chat"
         for m in msgs:
             if m["role"] == "user":
                 title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
                 break
-        
         prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
         if st.button(f"{prefix}{title}", key=chat_id, use_container_width=True):
             st.session_state.current_chat_id = chat_id
@@ -182,27 +172,17 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
 
     if provider == "gemini":
-        gemini_models = [
-            "gemini-2.5-pro",
-            "gemini-3.1-pro",
-            "gemini-2.5-flash",
-            "gemini-3.5-flash",
-            "gemini-2.5-flash-8b",
-            "gemini-3.5-flash-8b"
-        ]
+        gemini_models = ["gemini-2.5-pro", "gemini-3.1-pro", "gemini-2.5-flash", "gemini-3.5-flash", "gemini-2.5-flash-8b"]
         model = st.selectbox("Select Gemini Model", gemini_models)
     else:
-        default_model = "gpt-3.5-turbo" if provider == "openai" else "llama3-8b-8192"
-        model = st.text_input("Model Name", value=default_model)
+        model = st.text_input("Model Name", value="gpt-3.5-turbo")
         
     st.divider()
-    
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
@@ -213,7 +193,6 @@ with st.sidebar:
 if "messages" not in st.session_state or len(st.session_state.messages) == 0:
     st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
 
-# පරණ මැසේජ් සහ ඒවායේ තිබූ පින්තූර/හඬ පට නැවත පෙන්වීම
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -224,40 +203,37 @@ for message in st.session_state.messages:
                 elif att["type"].startswith("video/"): st.video(raw_bytes)
                 elif att["type"].startswith("audio/"): st.audio(raw_bytes)
 
-# --- 🔥 MULTIMODAL INPUTS FEATURE (ෆොටෝ / වොයිස් එකතු කිරීම) 🔥 ---
-with st.expander("📎 Attach Media (පින්තූර / වීඩියෝ / හඬ එකතු කරන්න)", expanded=False):
-    uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video, Audio)", type=["png", "jpg", "jpeg", "mp4", "mp3", "wav", "m4a"])
-    voice_file = st.audio_input("🎙️ හඬක් පටිගත කරන්න (Voice Recorder)")
+# --- 🔥 NATIVE APP STYLE ATTACHMENTS (POPOVER) 🔥 ---
+# Chat box එකට උඩින්ම අලුත්ම Gemini විදිහට + බට්න් එකක්
+with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
+    uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
+    st.markdown("---")
+    voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
 
 # --- CHAT LOGIC ---
-if prompt := st.chat_input("මොනවා හරි අහන්න..."):
+if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
     attachments = []
     active_parts = [{"text": prompt}]
     
-    # පින්තූර හෝ වීඩියෝ සැකසීම
     if uploaded_file:
         file_bytes = uploaded_file.getvalue()
         b64_data = base64.b64encode(file_bytes).decode("utf-8")
         attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
         active_parts.append({"inline_data": {"mime_type": uploaded_file.type, "data": b64_data}})
         
-    # Voice රෙකෝඩින් සැකසීම
     if voice_file:
         voice_bytes = voice_file.getvalue()
         b64_data = base64.b64encode(voice_bytes).decode("utf-8")
         attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
         active_parts.append({"inline_data": {"mime_type": voice_file.type, "data": b64_data}})
         
-    # Wrapper එකට කියවීමට සුරැකීම
     st.session_state.active_parts = active_parts
     
-    # User Screen එකේ ක්ෂණිකව පෙන්වීම
     with st.chat_message("user"):
         st.markdown(prompt)
         if uploaded_file:
             if uploaded_file.type.startswith("image/"): st.image(file_bytes)
             elif uploaded_file.type.startswith("video/"): st.video(file_bytes)
-            elif uploaded_file.type.startswith("audio/"): st.audio(file_bytes)
         if voice_file:
             st.audio(voice_bytes)
             
@@ -278,10 +254,8 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         
         try:
             clean_key = api_key.strip()
-            
             if not os.path.exists(Config.ENV_FILE):
                  with open(Config.ENV_FILE, 'w') as f: f.write("")
-            
             set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
             Config.ACTIVE_PROVIDER = provider
             Config.ACTIVE_MODEL = model
@@ -289,29 +263,24 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             brain = HacxBrain(clean_key)
             brain.model = model 
             
-            # මුල් මොළයට හානියක් නැත, එය ක්‍රියාත්මක වන්නේ අකුරු වලින්මය
             generator = brain.chat(prompt)
-            
             for chunk in generator:
                 full_response += chunk
                 message_placeholder.markdown(full_response + "▌")
             
-            # --- සිංහල පරිවර්තනය ---
             try:
                 trans_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
                 trans_payload = {"contents": [{"parts": [{"text": f"Translate this text to Sinhala: {full_response}"}]}]}
                 trans_res = requests.post(trans_url, json=trans_payload).json()
                 final_response = trans_res["candidates"][0]["content"]["parts"][0]["text"]
-                
-                # කොපි බට්න් එකත් එක්කම අවසන් උත්තරය පෙන්වීම
                 message_placeholder.markdown(final_response)
                 full_response = final_response
             except:
                 message_placeholder.markdown(full_response)
             
         except Exception as e:
-            st.error(f"❌ Error: {e}")
-            full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
+            st.error(f"❌ {e}")
+            full_response = str(e)
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
