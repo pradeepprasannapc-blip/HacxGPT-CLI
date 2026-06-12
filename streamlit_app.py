@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import requests
+import json
 
 # --- 🔥 THE ULTIMATE FIX: අලුත් Native Gemini Wrapper එක 🔥 ---
 class MockDelta:
@@ -53,7 +54,19 @@ class NativeClient:
         self.chat = Chat(api_key)
 
 # --- Streamlit UI Setup ---
-st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="HacxGPT Web", page_icon="🤖", layout="centered", initial_sidebar_state="auto")
+
+# --- UI Hiding (Header, Footer, MainMenu) ---
+# මෙතනින් Streamlit branding එකයි Footer එකයි මකනවා. හැබැයි Menu Button එක ඉතුරු කරනවා.
+hide_ui_css = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {background-color: transparent !important;}
+[data-testid="stToolbar"] {visibility: hidden !important;}
+</style>
+"""
+st.markdown(hide_ui_css, unsafe_allow_html=True)
 
 try:
     from hacxgpt.config import Config
@@ -70,14 +83,64 @@ except ImportError as e:
     st.error(f"ඇප් එකේ ෆයිල්ස් හොයාගන්න බැහැ. Error: {e}")
     st.stop()
 
-st.title("🤖 HacxGPT - Web Interface")
+# --- DATABASE / MEMORY SYSTEM ---
+CHAT_DIR = "user_chats"
+if not os.path.exists(CHAT_DIR):
+    os.makedirs(CHAT_DIR)
 
-with st.sidebar: # 'With' වෙනුවට 'with' ලෙස නිවැරදි කර ඇත
+def load_chat(email):
+    file_path = os.path.join(CHAT_DIR, f"{email}.json")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_chat(email, messages):
+    file_path = os.path.join(CHAT_DIR, f"{email}.json")
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=4)
+
+# --- LOGIN SYSTEM ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_email = ""
+
+if not st.session_state.logged_in:
+    st.title("🔐 HacxGPT Login")
+    st.markdown("කරුණාකර ඔබගේ ගිණුමට ඇතුලත් වන්න. (ඔබගේ චැට් ඉතිහාසය සුරක්ෂිතව තබාගැනීම සඳහා)")
+    
+    with st.form("login_form"):
+        email_input = st.text_input("ඔබගේ Email ලිපිනය (Google Account)")
+        submitted = st.form_submit_button("ඇතුලත් වන්න (Login)")
+        
+        if submitted:
+            if email_input:
+                st.session_state.logged_in = True
+                # Email එක ෆයිල් නේම් එකක් විදිහට පාවිච්චි කරන්න පුළුවන් විදිහට හදනවා
+                safe_email = email_input.strip().lower().replace("@", "_at_").replace(".", "_dot_")
+                st.session_state.user_email = safe_email
+                st.rerun()
+            else:
+                st.error("⚠️ කරුණාකර Email ලිපිනයක් ලබා දෙන්න.")
+    st.stop() # ලොග් වෙලා නැත්නම් මෙතනින් එහාට ඇප් එක run වෙන්නේ නෑ
+
+# --- MAIN APP (After Login) ---
+st.title(f"🤖 HacxGPT - Web Interface")
+
+# Logout Button in top right
+col1, col2 = st.columns([8, 2])
+with col2:
+    if st.button("🚪 Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.messages = []
+        st.rerun()
+
+with st.sidebar:
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
 
-    # Provider අනුව model එක තෝරන විදිහ වෙනස් කිරීම
     if provider == "gemini":
         gemini_models = [
             "gemini-2.5-pro",
@@ -89,12 +152,12 @@ with st.sidebar: # 'With' වෙනුවට 'with' ලෙස නිවැරද
         ]
         model = st.selectbox("Select Gemini Model", gemini_models)
     else:
-        # OpenAI සහ Groq සඳහා text input එක
         default_model = "gpt-3.5-turbo" if provider == "openai" else "llama3-8b-8192"
         model = st.text_input("Model Name", value=default_model)
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# --- LOAD HISTORY FOR THE LOGGED IN USER ---
+if "messages" not in st.session_state or len(st.session_state.messages) == 0:
+    st.session_state.messages = load_chat(st.session_state.user_email)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -103,6 +166,9 @@ for message in st.session_state.messages:
 if prompt := st.chat_input("මොනවා හරි අහන්න..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # යුසර් ප්‍රශ්නෙ ඇහුව ගමන් සේව් කරනවා
+    save_chat(st.session_state.user_email, st.session_state.messages)
 
     if not api_key:
         st.error("⚠️ කරුණාකර Sidebar එකෙන් API Key එක ඇතුලත් කරන්න.")
@@ -115,7 +181,6 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
         try:
             clean_key = api_key.strip()
             
-            # පරිසර විචල්‍යයන් සැකසීම
             if not os.path.exists(Config.ENV_FILE):
                  with open(Config.ENV_FILE, 'w') as f: f.write("")
             
@@ -126,6 +191,7 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             brain = HacxBrain(clean_key)
             brain.model = model 
             
+            # (වෙනස් කලේ නෑ)
             generator = brain.chat(prompt)
             
             for chunk in generator:
@@ -148,3 +214,5 @@ if prompt := st.chat_input("මොනවා හරි අහන්න..."):
             full_response = "සමාවෙන්න, දෝෂයක් ඇතිවිය."
             
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+    # AI උත්තර දුන්නට පස්සෙත් චැට් එක සේව් කරනවා
+    save_chat(st.session_state.user_email, st.session_state.messages)
