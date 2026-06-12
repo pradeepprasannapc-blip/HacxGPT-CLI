@@ -72,11 +72,24 @@ except ImportError as e:
 
 st.title("🤖 HacxGPT - Web Interface")
 
-with st.sidebar:
+with st.sidebar: # 'With' වෙනුවට 'with' ලෙස නිවැරදි කර ඇත
     st.header("⚙️ Settings")
     provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
     api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password")
-    model = st.text_input("Model Name", value="gemini-1.5-flash" if provider=="gemini" else "gpt-3.5-turbo")
+
+    # Provider අනුව model එක තෝරන විදිහ වෙනස් කිරීම
+    if provider == "gemini":
+        gemini_models = [
+            "gemini-1.5-pro",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-1.0-pro"
+        ]
+        model = st.selectbox("Select Gemini Model", gemini_models)
+    else:
+        # OpenAI සහ Groq සඳහා text input එක
+        default_model = "gpt-3.5-turbo" if provider == "openai" else "llama3-8b-8192"
+        model = st.text_input("Model Name", value=default_model)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
