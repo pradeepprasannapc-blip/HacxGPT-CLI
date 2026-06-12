@@ -78,44 +78,49 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 Manage App මකා දැමීමේ රහස් JavaScript (JS Hunter) 🔥 ---
+# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
+# (චැට් එකේ ලියන දේවල් මැකෙන්නේ නැති වෙන්න හදා ඇත)
 components.html(
     """
     <script>
-    // Streamlit Cloud එකෙන් දාන හැම ලාංඡනයක්ම හොයලා මකා දමනවා
     setInterval(function() {
-        var elements = window.parent.document.querySelectorAll('[class*="viewerBadge"], [data-testid="manage-app-button"], [data-testid="stAppDeployButton"], .stDeployButton');
-        for (var i = 0; i < elements.length; i++) {
-            elements[i].style.display = 'none';
-            elements[i].style.visibility = 'hidden';
-            elements[i].style.opacity = '0';
-            elements[i].style.width = '0px';
-            elements[i].style.height = '0px';
-        }
-    }, 100);
+        try {
+            var docs = [document, window.parent.document];
+            docs.forEach(function(doc) {
+                // Streamlit Cloud එකේ නිශ්චිත ලින්ක් සහ ක්ලාස් පමණක් ඉලක්ක කරයි
+                var badges = doc.querySelectorAll('a[href*="share.streamlit.io"], div[class*="viewerBadge"], [data-testid="manage-app-button"], [data-testid="stAppDeployButton"], .stDeployButton, #MainMenu, footer');
+                badges.forEach(function(badge) {
+                    badge.style.display = 'none';
+                    badge.style.visibility = 'hidden';
+                    badge.style.opacity = '0';
+                    badge.style.pointerEvents = 'none';
+                });
+            });
+        } catch(e) {} 
+    }, 200); 
     </script>
     """,
     height=0,
     width=0,
 )
 
-# --- 🔥 UI & Manage App Hiding CSS 🔥 ---
+# --- 🔥 UI & Hiding CSS (යට හිඩැස සම්පූර්ණයෙන්ම නැති කිරීම) 🔥 ---
 st.markdown("""
 <style>
 /* Main Streamlit elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-footer { display: none !important; visibility: hidden !important; }
 
-/* CSS Backup Hide */
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; }
-.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; }
+/* Footer සහ යටින් එන හිඩැස සම්පූර්ණයෙන්ම මැකීම */
+footer { display: none !important; visibility: hidden !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
+.appview-container .main .block-container { padding-bottom: 2rem !important; }
+#st-deck-go-action-floating { display: none !important; }
+
+/* CSS Backup Hide for Badges */
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; }
 div[class*="viewerBadge_container"] { display: none !important; }
-
-/* Spacing Fix */
-.block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
-code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Title Styling */
 .hacx-title {
@@ -410,7 +415,7 @@ if not st.session_state.logged_in:
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
-# 🔥 සනිකව පණිවිඩ පෙන්වීමේ Alert එක (Instant Notifications Check) 🔥
+# 🔥 සනිකව පණිවිඩ පෙන්වීමේ Alert එක 🔥
 my_notifications = []
 if st.session_state.user_role in [1, 2]:
     my_notifications = get_admin_notifications()
@@ -490,7 +495,6 @@ with tab_settings:
 # --- 🎧 SUPPORT & INBOX TAB (For Users) ---
 if tab_support is not None:
     with tab_support:
-        # User Inbox
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
         if not my_notifications:
             st.info("ඔබට අලුත් පණිවිඩ නොමැත.")
@@ -503,7 +507,6 @@ if tab_support is not None:
                         st.rerun()
         st.divider()
         
-        # User to Admin Form
         st.markdown("### 🎧 ඇඩ්මින්ට පණිවිඩයක් යවන්න")
         with st.form("support_form"):
             user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=100)
@@ -518,7 +521,6 @@ if tab_support is not None:
 # --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
-        # Admin Inbox
         st.markdown("### 🔔 පරිශීලක පණිවිඩ (Inbox)")
         if not my_notifications:
             st.info("අලුත් පණිවිඩ නොමැත.")
@@ -533,7 +535,6 @@ if tab_admin is not None:
         
         users = get_all_users_for_admin()
         
-        # Admin sending message to users
         st.markdown("### 📢 පරිශීලකයන්ට පණිවිඩ යවන්න (Send Message)")
         with st.form("admin_msg_form"):
             user_emails = [u[1] for u in users if u[1].lower() != "admin@hacx.lk"]
@@ -556,7 +557,6 @@ if tab_admin is not None:
 
         st.divider()
         
-        # User Management 
         st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         if not users:
             st.info("පරිශීලකයින් හමු නොවීය.")
@@ -572,7 +572,6 @@ if tab_admin is not None:
                     st.write(f"**Phone Number:** {phone}")
                     st.markdown("---")
                     
-                    # Password Edit
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         new_pass = st.text_input("මුරපදය වෙනස් කරන්න", value=password, key=f"pass_{user_id}")
@@ -583,7 +582,6 @@ if tab_admin is not None:
                             st.toast("✅ මුරපදය වෙනස් කළා!", icon="💾")
                     
                     st.markdown("---")
-                    # Roles & Delete (Only Super Admin can do this)
                     if st.session_state.user_role == 1:
                         col_r1, col_r2 = st.columns([3, 1])
                         with col_r1:
