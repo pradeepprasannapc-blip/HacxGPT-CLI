@@ -78,49 +78,65 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
-# (චැට් එකේ ලියන දේවල් මැකෙන්නේ නැති වෙන්න හදා ඇත)
+# --- 🔥 Manage App මකා දැමීමේ නිවැරදි කළ JavaScript (Isolator Hunter) 🔥 ---
 components.html(
     """
     <script>
-    setInterval(function() {
-        try {
-            var docs = [document, window.parent.document];
-            docs.forEach(function(doc) {
-                // Streamlit Cloud එකේ නිශ්චිත ලින්ක් සහ ක්ලාස් පමණක් ඉලක්ක කරයි
-                var badges = doc.querySelectorAll('a[href*="share.streamlit.io"], div[class*="viewerBadge"], [data-testid="manage-app-button"], [data-testid="stAppDeployButton"], .stDeployButton, #MainMenu, footer');
-                badges.forEach(function(badge) {
-                    badge.style.display = 'none';
-                    badge.style.visibility = 'hidden';
-                    badge.style.opacity = '0';
-                    badge.style.pointerEvents = 'none';
-                });
+    const hideBadges = (doc) => {
+        const selectors = [
+            '[class*="viewerBadge"]', 
+            '[class*="stDeployButton"]', 
+            '[data-testid="stAppDeployButton"]', 
+            '[data-testid="manage-app-button"]', 
+            'a[href*="streamlit.io"]',
+            'streamlit-app-badge'
+        ];
+        selectors.forEach(sel => {
+            doc.querySelectorAll(sel).forEach(el => {
+                el.style.display = 'none';
+                el.style.opacity = '0';
+                el.style.visibility = 'hidden';
+                el.style.pointerEvents = 'none';
+                if(el.parentElement) {
+                    el.parentElement.style.display = 'none';
+                }
             });
-        } catch(e) {} 
-    }, 200); 
+        });
+    };
+
+    setInterval(() => {
+        // අපේ ඇප් එක ඇතුලේ තියෙන ඒව මකනවා
+        try { hideBadges(document); } catch(e) {}
+        
+        // පිටතින් දාන ඒවත් මකන්න ට්‍රයි කරනවා (CORS error ආවත් කමක් නෑ)
+        try { hideBadges(window.parent.document); } catch(e) {}
+        try { hideBadges(window.top.document); } catch(e) {}
+    }, 50); 
     </script>
     """,
     height=0,
     width=0,
 )
 
-# --- 🔥 UI & Hiding CSS (යට හිඩැස සම්පූර්ණයෙන්ම නැති කිරීම) 🔥 ---
+# --- 🔥 UI & Hiding CSS 🔥 ---
 st.markdown("""
 <style>
 /* Main Streamlit elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-
-/* Footer සහ යටින් එන හිඩැස සම්පූර්ණයෙන්ම මැකීම */
 footer { display: none !important; visibility: hidden !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
-.appview-container .main .block-container { padding-bottom: 2rem !important; }
-#st-deck-go-action-floating { display: none !important; }
 
-/* CSS Backup Hide for Badges */
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
-.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; }
-div[class*="viewerBadge_container"] { display: none !important; }
+/* CSS Badge Annihilation */
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+div[class^="viewerBadge"], div[class*="viewerBadge"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+a[href*="streamlit"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+streamlit-app-badge { display: none !important; }
+
+/* Spacing Fixes */
+.appview-container .main .block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
+code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Title Styling */
 .hacx-title {
