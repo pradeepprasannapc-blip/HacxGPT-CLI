@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import requests
 import json
@@ -77,21 +78,64 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 🔥 Safe UI CSS (ආරක්ෂිතව Hide කිරීම) 🔥 ---
+# --- 🔥 Manage App මකා දැමීමේ නිවැරදි කළ JavaScript (Isolator Hunter) 🔥 ---
+components.html(
+    """
+    <script>
+    const hideBadges = (doc) => {
+        const selectors = [
+            '[class*="viewerBadge"]', 
+            '[class*="stDeployButton"]', 
+            '[data-testid="stAppDeployButton"]', 
+            '[data-testid="manage-app-button"]', 
+            'a[href*="streamlit.io"]',
+            'streamlit-app-badge'
+        ];
+        selectors.forEach(sel => {
+            doc.querySelectorAll(sel).forEach(el => {
+                el.style.display = 'none';
+                el.style.opacity = '0';
+                el.style.visibility = 'hidden';
+                el.style.pointerEvents = 'none';
+                if(el.parentElement) {
+                    el.parentElement.style.display = 'none';
+                }
+            });
+        });
+    };
+
+    setInterval(() => {
+        // අපේ ඇප් එක ඇතුලේ තියෙන ඒව මකනවා
+        try { hideBadges(document); } catch(e) {}
+        
+        // පිටතින් දාන ඒවත් මකන්න ට්‍රයි කරනවා (CORS error ආවත් කමක් නෑ)
+        try { hideBadges(window.parent.document); } catch(e) {}
+        try { hideBadges(window.top.document); } catch(e) {}
+    }, 50); 
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
+# --- 🔥 UI & Hiding CSS 🔥 ---
 st.markdown("""
 <style>
 /* Main Streamlit elements */
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-footer { display: none !important; visibility: hidden !important; }
+footer { display: none !important; visibility: hidden !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
 
-/* Safe hiding for internal deploy buttons */
-.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
-#st-deck-go-action-floating { display: none !important; }
+/* CSS Badge Annihilation */
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; visibility: hidden !important; opacity: 0 !important; }
+div[class^="viewerBadge"], div[class*="viewerBadge"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+a[href*="streamlit"] { display: none !important; opacity: 0 !important; pointer-events: none !important; }
+streamlit-app-badge { display: none !important; }
 
-/* Spacing Fix */
-.block-container { padding-top: 1.5rem !important; padding-bottom: 6rem !important; }
+/* Spacing Fixes */
+.appview-container .main .block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
 code { font-family: 'Courier New', Courier, monospace !important; font-size: 14px !important; }
 
 /* Title Styling */
@@ -373,6 +417,7 @@ if not st.session_state.logged_in:
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
                     add_notification("admin", f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    st.success("✅ ඇඩ්මින් වෙත පණිවිඩයක් යවන ලදී!")
                     st.toast("✅ ඇඩ්මින් වෙත පණිවිඩයක් යැව්වා!", icon="🚀")
                 else:
                     st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
@@ -485,6 +530,7 @@ if tab_support is not None:
                 if user_message.strip():
                     add_notification("admin", f"💬 {st.session_state.user_email} ගෙන්: {user_message}")
                     st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
+                    st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
@@ -519,9 +565,11 @@ if tab_admin is not None:
                         for email in user_emails:
                             add_notification(email, f"📢 Admin පණිවිඩය: {admin_msg}")
                         st.toast("✅ සියලු දෙනාටම පණිවිඩය යැව්වා!", icon="🚀")
+                        st.success("✅ සියලු දෙනාටම පණිවිඩය යවන ලදී!")
                     else:
                         add_notification(target_audience, f"📢 Admin පණිවිඩය: {admin_msg}")
                         st.toast(f"✅ {target_audience} වෙත පණිවිඩය යැව්වා!", icon="🚀")
+                        st.success(f"✅ {target_audience} වෙත පණිවිඩය යවන ලදී!")
 
         st.divider()
         
