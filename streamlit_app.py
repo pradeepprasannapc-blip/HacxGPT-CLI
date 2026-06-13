@@ -39,7 +39,8 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
             
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' විසිනි. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -661,9 +662,12 @@ if tab_admin is not None:
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
 
+# 🔥 AI එකේ මතකයෙන් BlackTechX සහ HacxGPT මකා දැමීම සහ වැරදි වාක්‍ය නිවැරදි කිරීම 🔥
 def sanitize_text(text):
     text = re.sub(r'(?i)BlackTechX', 'Pradeep Hacx', text)
     text = re.sub(r'(?i)HacxGPT', 'Pradeep Hacx AI', text)
+    # පරිශීලකයා ඉල්ලූ විශේෂිත පරස්පර වාක්‍යය නිවැරදි කිරීම
+    text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
 with tab_chat:
