@@ -346,7 +346,11 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
-    st.session_state.saved_api_key = ""
+    # 🔥 Streamlit Secrets වලින් API Key එක Auto ගන්න හැදුවා 🔥
+    try:
+        st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+    except KeyError:
+        st.session_state.saved_api_key = ""
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
