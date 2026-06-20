@@ -201,6 +201,12 @@ def init_db():
             is_admin INTEGER DEFAULT 0 
         )
     """)
+    # 🔥 අලුතින් API Key සේව් කරන්න කොලම් එකක් එකතු කරනවා (පරණ අයටත් එක්ක) 🔥
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN api_key TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass # Column එක දැනටමත් තියෙනවා නම් මුකුත් කරන්නේ නෑ
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -228,11 +234,17 @@ def add_user(email, phone, password):
 def verify_user(email, password):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
+    # 🔥 දැන් DB එකෙන් API Key එකත් අරගන්නවා 🔥
+    try:
+        cursor.execute("SELECT email, password, is_admin, api_key FROM users WHERE email=?", (email.lower(),))
+    except sqlite3.OperationalError:
+        cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
+    
     result = cursor.fetchone()
     conn.close()
     if result and result[1] == password:
-        return {"email": result[0], "role_int": result[2]}
+        api_val = result[3] if len(result) > 3 else ""
+        return {"email": result[0], "role_int": result[2], "api_key": api_val}
     return None
 
 def find_user_by_email(email):
@@ -299,6 +311,14 @@ def update_user_role(user_id, role_int):
     conn.close()
     return True
 
+# 🔥 අලුත් ෆන්ක්ෂන් එක: API Key එක DB එකේ සේව් කරන්න 🔥
+def update_user_api_key(email, api_key):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET api_key=? WHERE email=?", (api_key, email.lower()))
+    conn.commit()
+    conn.close()
+
 # --- 📩 සර්වසම්පූර්ණ Inbox/Notification System ---
 def add_notification(target_email, message):
     conn = get_db()
@@ -346,11 +366,8 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
-    # 🔥 Streamlit Secrets වලින් API Key එක Auto ගන්න හැදුවා 🔥
-    try:
-        st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
-    except KeyError:
-        st.session_state.saved_api_key = ""
+    # ආරම්භයේදී Session Key එක හිස්ව තබයි (Login එකෙන් පසුව මෙය පිරවේ)
+    st.session_state.saved_api_key = ""
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -378,6 +395,10 @@ if not st.session_state.logged_in:
                          st.session_state.user_role = 1
                          st.session_state.current_chat_id = str(uuid.uuid4())
                          st.session_state.messages = []
+                         try:
+                             st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                         except KeyError:
+                             st.session_state.saved_api_key = ""
                          st.rerun()
                     
                     user = verify_user(login_email, login_password)
@@ -387,6 +408,16 @@ if not st.session_state.logged_in:
                         st.session_state.user_role = user["role_int"]
                         st.session_state.current_chat_id = str(uuid.uuid4())
                         st.session_state.messages = []
+                        
+                        # 🔥 DB එකේ සේව් කරපු Key එකක් තියෙනවා නම් ඒක අරගන්නවා. නැත්නම් Secret එක පාවිච්චි කරනවා.
+                        if user["api_key"]:
+                            st.session_state.saved_api_key = user["api_key"]
+                        else:
+                            try:
+                                st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                            except KeyError:
+                                st.session_state.saved_api_key = ""
+                                
                         st.rerun()
                     else:
                         st.error("⚠️ ඔබගේ Email ලිපිනය හෝ මුරපදය වැරදියි.")
@@ -513,6 +544,8 @@ with tab_settings:
         
     if st.button("💾 සැකසුම් සුරකින්න (Save Settings)", use_container_width=True, type="primary"):
         st.session_state.saved_api_key = input_api_key
+        # 🔥 Save කරද්දිම Database එකටත් API Key එක Save කරනවා 🔥
+        update_user_api_key(st.session_state.user_email, input_api_key)
         st.success("✅ සැකසුම් සාර්ථකව සුරැකුවා! දැන් '💬 AI චැට්' ටැබ් එකට ගොස් කතා කරන්න.")
 
     st.divider()
