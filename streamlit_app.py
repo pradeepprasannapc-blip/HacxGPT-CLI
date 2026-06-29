@@ -5,11 +5,11 @@ import requests
 import json
 import uuid
 import base64
-import sqlite3
 import re
+from supabase import create_client, Client
 
 # =====================================================================================================
-# 🧠 --- AI Brain/Engine කොටස --- 🧠
+# 🧠 --- AI Brain/Engine කොටස (With Conversation Memory) --- 🧠
 # =====================================================================================================
 class MockDelta:
     def __init__(self, content):
@@ -32,12 +32,21 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
+        # 🔥 පරණ මැසේජ් ඔක්කොම AI එකට මතක හිටින්න හරියටම Format කරන කොටස 🔥
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
                 continue
+            
             role = "user" if m["role"] == "user" else "model"
-            contents.append({"role": role, "parts": [{"text": m["content"]}]})
+            parts = [{"text": m["content"]}]
+            
+            # පරණ ෆොටෝ/වොයිස් තිබ්බොත් ඒවත් AI එකට මතක් කරලා දෙනවා
+            if "attachments" in m:
+                for att in m["attachments"]:
+                    parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
+                    
+            contents.append({"role": role, "parts": parts})
             
         # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
         identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
@@ -46,13 +55,6 @@ class NativeGeminiCompletions:
             system_text = identity_prompt + "\n\n" + system_text
         else:
             system_text = identity_prompt
-        
-        if "active_parts" in st.session_state and st.session_state.active_parts:
-            for item in reversed(contents):
-                if item["role"] == "user":
-                    item["parts"] = st.session_state.active_parts
-                    break
-            st.session_state.active_parts = None
         
         payload = {"contents": contents}
         if system_text:
@@ -66,7 +68,11 @@ class NativeGeminiCompletions:
         elif res.status_code != 200:
             raise Exception(f"API Error {res.status_code}: {res.text}")
         
-        text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        try:
+            text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."
+            
         return [MockResponse(text)] if stream else MockResponse(text)
 
 class NativeClient:
@@ -79,13 +85,22 @@ class NativeClient:
 # --- Streamlit UI Setup ---
 st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
 
-# 🔥 Secrets වලින් Admin විස්තර ගැනීම (GitHub එකේ පේන්නේ නෑ) 🔥
+# 🔥 Secrets Setup 🔥
 try:
     ADMIN_EMAIL = st.secrets["ADMIN_EMAIL"]
     ADMIN_PASSWORD = str(st.secrets["ADMIN_PASSWORD"])
 except KeyError:
     ADMIN_EMAIL = "admin@hacx.lk"
     ADMIN_PASSWORD = "1234"
+
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except KeyError:
+    st.error("⚠️ කරුණාකර Streamlit Cloud හි Supabase Secrets (SUPABASE_URL, SUPABASE_KEY) සකසන්න.")
+    st.stop()
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
 components.html(
@@ -111,24 +126,18 @@ components.html(
     width=0,
 )
 
-# --- 🔥 UI & CSS (යට හිඩැස නැති කිරීම සහ අකුරු Wrap කිරීම) 🔥 ---
+# --- 🔥 UI & CSS 🔥 ---
 st.markdown("""
 <style>
 header { display: none !important; }
 [data-testid="collapsedControl"] { display: none !important; }
 [data-testid="stToolbar"] { display: none !important; }
-
-/* Footer සහ යටින් එන හිඩැස සම්පූර්ණයෙන්ම මැකීම */
 footer { display: none !important; visibility: hidden !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
 .appview-container .main .block-container { padding-bottom: 2rem !important; }
 #st-deck-go-action-floating { display: none !important; }
-
-/* CSS Backup Hide for Badges */
 .stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
 .viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; }
 div[class*="viewerBadge_container"] { display: none !important; }
-
-/* 🔥 සාමාන්‍ය අකුරු ලස්සනට කඩා හැලීම (Text Wrapping Fix) 🔥 */
 .stChatMessage { overflow-x: hidden !important; }
 [data-testid="stChatMessageContent"] .stMarkdown p, 
 [data-testid="stChatMessageContent"] .stMarkdown li, 
@@ -137,16 +146,12 @@ div[class*="viewerBadge_container"] { display: none !important; }
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
 }
-
-/* 💻 කෝඩ් කොටු (Code Blocks) වලට පමණක් Scroll එකක් දීම 💻 */
 [data-testid="stChatMessageContent"] .stMarkdown pre {
     white-space: pre !important;
     word-wrap: normal !important;
     overflow-x: auto !important;
     border-radius: 8px;
 }
-
-/* Title Styling */
 .hacx-title {
     text-align: center;
     background: linear-gradient(90deg, #ff4b4b, #ff904f, #ff4b4b);
@@ -177,196 +182,123 @@ except ImportError:
     pass
 
 # =====================================================================================================
-# 🔐 --- දත්ත සමුදාය (Database) --- 🔐
+# 🔐 --- දත්ත සමුදාය (Supabase Database Functions) --- 🔐
 # =====================================================================================================
 
-DB_FILE = "users.db"
-CHAT_DIR = "user_chats"
-
-if not os.path.exists(CHAT_DIR):
-    os.makedirs(CHAT_DIR)
-
-def get_db():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            phone TEXT NOT NULL,
-            password TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 0 
-        )
-    """)
-    # 🔥 අලුතින් API Key සේව් කරන්න කොලම් එකක් එකතු කරනවා (පරණ අයටත් එක්ක) 🔥
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN api_key TEXT DEFAULT ''")
-    except sqlite3.OperationalError:
-        pass # Column එක දැනටමත් තියෙනවා නම් මුකුත් කරන්නේ නෑ
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL,
-            message TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
 def add_user(email, phone, password):
-    conn = get_db()
-    cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (email, phone, password) VALUES (?, ?, ?)", (email.lower(), phone, password))
-        conn.commit()
-        conn.close()
+        supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
         return True
-    except sqlite3.IntegrityError:
-        conn.close()
+    except Exception:
         return False
 
 def verify_user(email, password):
-    conn = get_db()
-    cursor = conn.cursor()
-    # 🔥 දැන් DB එකෙන් API Key එකත් අරගන්නවා 🔥
     try:
-        cursor.execute("SELECT email, password, is_admin, api_key FROM users WHERE email=?", (email.lower(),))
-    except sqlite3.OperationalError:
-        cursor.execute("SELECT email, password, is_admin FROM users WHERE email=?", (email.lower(),))
-    
-    result = cursor.fetchone()
-    conn.close()
-    if result and result[1] == password:
-        api_val = result[3] if len(result) > 3 else ""
-        return {"email": result[0], "role_int": result[2], "api_key": api_val}
+        res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.lower()).execute()
+        if res.data and res.data[0]["password"] == password:
+            return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
+    except Exception:
+        pass
     return None
 
 def find_user_by_email(email):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT email, phone FROM users WHERE email=?", (email.lower(),))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+    try:
+        res = supabase.table("users").select("email, phone").eq("email", email.lower()).execute()
+        if res.data:
+            return (res.data[0]["email"], res.data[0]["phone"])
+    except Exception:
+        pass
+    return None
 
 def get_all_users_for_admin():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, email, phone, password, is_admin FROM users")
-    result = cursor.fetchall()
-    conn.close()
-    return result
+    try:
+        res = supabase.table("users").select("id, email, phone, password, is_admin").execute()
+        return [(r["id"], r["email"], r["phone"], r["password"], r["is_admin"]) for r in res.data]
+    except Exception:
+        return []
 
 def get_users_by_roles(roles):
-    conn = get_db()
-    cursor = conn.cursor()
-    placeholders = ','.join('?' for _ in roles)
-    cursor.execute(f"SELECT email FROM users WHERE is_admin IN ({placeholders})", roles)
-    res = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return res
+    try:
+        res = supabase.table("users").select("email").in_("is_admin", roles).execute()
+        return [r["email"] for r in res.data]
+    except Exception:
+        return []
 
 def delete_user_by_id(user_id):
-    if st.session_state.user_role != 1: 
+    if st.session_state.user_role != 1: return False
+    try:
+        res = supabase.table("users").select("email").eq("id", user_id).execute()
+        if res.data:
+            user_email = res.data[0]["email"].lower()
+            supabase.table("chats").delete().eq("email", user_email).execute()
+            supabase.table("users").delete().eq("id", user_id).execute()
+        return True
+    except Exception:
         return False
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT email FROM users WHERE id=?", (user_id,))
-    email_res = cursor.fetchone()
-    if email_res:
-        email = email_res[0]
-        safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
-        user_dir = os.path.join(CHAT_DIR, safe_email)
-        import shutil
-        if os.path.exists(user_dir):
-            shutil.rmtree(user_dir)
-    cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
-    conn.commit()
-    conn.close()
-    return True
 
 def update_user_password(user_id, new_password):
-    if st.session_state.user_role == 0:
-        return False
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET password=? WHERE id=?", (new_password, user_id))
-    conn.commit()
-    conn.close()
-    return True
+    if st.session_state.user_role == 0: return False
+    try:
+        supabase.table("users").update({"password": new_password}).eq("id", user_id).execute()
+        return True
+    except Exception: return False
 
 def update_user_role(user_id, role_int):
-    if st.session_state.user_role != 1: 
-        return False
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET is_admin=? WHERE id=?", (role_int, user_id))
-    conn.commit()
-    conn.close()
-    return True
+    if st.session_state.user_role != 1: return False
+    try:
+        supabase.table("users").update({"is_admin": role_int}).eq("id", user_id).execute()
+        return True
+    except Exception: return False
 
-# 🔥 අලුත් ෆන්ක්ෂන් එක: API Key එක DB එකේ සේව් කරන්න 🔥
 def update_user_api_key(email, api_key):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET api_key=? WHERE email=?", (api_key, email.lower()))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
+    except Exception: pass
 
-# --- 📩 සර්වසම්පූර්ණ Inbox/Notification System ---
+# --- Notifications (Supabase) ---
 def add_notification(target_email, message):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO notifications (email, message) VALUES (?, ?)", (target_email.lower(), message))
-    conn.commit()
-    conn.close()
+    try:
+        supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
+    except Exception: pass
 
 def get_my_notifications(email):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, message FROM notifications WHERE email=? ORDER BY id DESC", (email.lower(),))
-    result = cursor.fetchall()
-    conn.close()
-    return result
+    try:
+        res = supabase.table("notifications").select("id, message").eq("email", email.lower()).order("id", desc=True).execute()
+        return [(r["id"], r["message"]) for r in res.data]
+    except Exception: return []
 
 def delete_notification(notif_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM notifications WHERE id=?", (notif_id,))
-    conn.commit()
-    conn.close()
+    try: supabase.table("notifications").delete().eq("id", notif_id).execute()
+    except Exception: pass
 
-# --- Chat Memory ---
-def get_user_dir(email):
-    safe_email = email.strip().lower().replace("@", "_at_").replace(".", "_dot_")
-    user_dir = os.path.join(CHAT_DIR, safe_email)
-    if not os.path.exists(user_dir):
-        os.makedirs(user_dir)
-    return user_dir
+# --- Chat Memory (Supabase) ---
+def get_user_chats(email):
+    try:
+        res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
+        return res.data
+    except Exception: return []
 
-def load_chat(email, chat_id):
-    file_path = os.path.join(get_user_dir(email), f"{chat_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+def load_chat(chat_id):
+    try:
+        res = supabase.table("chats").select("messages").eq("chat_id", chat_id).execute()
+        if res.data: return res.data[0]["messages"]
+    except Exception: pass
     return []
 
 def save_chat(email, chat_id, messages):
-    file_path = os.path.join(get_user_dir(email), f"{chat_id}.json")
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(messages, f, ensure_ascii=False, indent=4)
+    try:
+        existing = supabase.table("chats").select("id").eq("chat_id", chat_id).execute()
+        if existing.data:
+            supabase.table("chats").update({"messages": messages, "updated_at": "now()"}).eq("chat_id", chat_id).execute()
+        else:
+            supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
+    except Exception as e:
+        print("Chat save error:", e)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
-    # ආරම්භයේදී Session Key එක හිස්ව තබයි (Login එකෙන් පසුව මෙය පිරවේ)
     st.session_state.saved_api_key = ""
 
 # =====================================================================================================
@@ -388,17 +320,14 @@ if not st.session_state.logged_in:
             
             if submitted:
                 if login_email and login_password:
-                    # Super Admin Master Login (From Secrets)
                     if login_email.lower() == ADMIN_EMAIL.lower() and login_password == ADMIN_PASSWORD:
                          st.session_state.logged_in = True
                          st.session_state.user_email = login_email
                          st.session_state.user_role = 1
                          st.session_state.current_chat_id = str(uuid.uuid4())
                          st.session_state.messages = []
-                         try:
-                             st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
-                         except KeyError:
-                             st.session_state.saved_api_key = ""
+                         try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                         except KeyError: st.session_state.saved_api_key = ""
                          st.rerun()
                     
                     user = verify_user(login_email, login_password)
@@ -409,14 +338,10 @@ if not st.session_state.logged_in:
                         st.session_state.current_chat_id = str(uuid.uuid4())
                         st.session_state.messages = []
                         
-                        # 🔥 DB එකේ සේව් කරපු Key එකක් තියෙනවා නම් ඒක අරගන්නවා. නැත්නම් Secret එක පාවිච්චි කරනවා.
-                        if user["api_key"]:
-                            st.session_state.saved_api_key = user["api_key"]
+                        if user["api_key"]: st.session_state.saved_api_key = user["api_key"]
                         else:
-                            try:
-                                st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
-                            except KeyError:
-                                st.session_state.saved_api_key = ""
+                            try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                            except KeyError: st.session_state.saved_api_key = ""
                                 
                         st.rerun()
                     else:
@@ -458,15 +383,10 @@ if not st.session_state.logged_in:
                 user_info = find_user_by_email(check_email)
                 if user_info:
                     st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
-                    
-                    # සියලුම Admins ලට පණිවිඩය යැවීම
                     admins = get_users_by_roles([1])
                     for adm in admins:
                         add_notification(adm, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
-                    
-                    # Super Admin (Secrets) ටත් යවන්න
                     add_notification(ADMIN_EMAIL, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
-                    
                     st.success("✅ ඇඩ්මින්වරුන් වෙත පණිවිඩයක් යවන ලදී!")
                     st.toast("✅ පණිවිඩය යැව්වා!", icon="🚀")
                 else:
@@ -481,17 +401,13 @@ if not st.session_state.logged_in:
 st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
 st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
 
-# 🔥 සනිකව පණිවිඩ පෙන්වීමේ Alert එක 🔥
 my_notifications = get_my_notifications(st.session_state.user_email)
 
 if my_notifications:
     st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා කරන්න.")
 
-user_dir = get_user_dir(st.session_state.user_email)
-chat_files = [f for f in os.listdir(user_dir) if f.endswith('.json')]
-chat_files.sort(key=lambda x: os.path.getmtime(os.path.join(user_dir, x)), reverse=True)
+chat_records = get_user_chats(st.session_state.user_email)
 
-# --- Role Based Tabs ---
 is_admin_or_mod = st.session_state.user_role in [1, 2]
 
 if is_admin_or_mod:
@@ -509,9 +425,9 @@ with tab_history:
         st.session_state.messages = []
         st.rerun()
         
-    for cf in chat_files:
-        chat_id = cf.replace(".json", "")
-        msgs = load_chat(st.session_state.user_email, chat_id)
+    for record in chat_records:
+        chat_id = record["chat_id"]
+        msgs = record["messages"]
         title = "Empty Chat"
         for m in msgs:
             if m["role"] == "user":
@@ -544,7 +460,6 @@ with tab_settings:
         
     if st.button("💾 සැකසුම් සුරකින්න (Save Settings)", use_container_width=True, type="primary"):
         st.session_state.saved_api_key = input_api_key
-        # 🔥 Save කරද්දිම Database එකටත් API Key එක Save කරනවා 🔥
         update_user_api_key(st.session_state.user_email, input_api_key)
         st.success("✅ සැකසුම් සාර්ථකව සුරැකුවා! දැන් '💬 AI චැට්' ටැබ් එකට ගොස් කතා කරන්න.")
 
@@ -556,7 +471,7 @@ with tab_settings:
         st.session_state.messages = []
         st.rerun()
 
-# --- 🎧 SUPPORT & INBOX TAB (For Users) ---
+# --- 🎧 SUPPORT & INBOX TAB ---
 if tab_support is not None:
     with tab_support:
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
@@ -576,7 +491,6 @@ if tab_support is not None:
             user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=100)
             if st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True):
                 if user_message.strip():
-                    # සියලුම Admins ලට සහ Moderators ලට යැවීම
                     targets = get_users_by_roles([1, 2])
                     if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
                     
@@ -613,7 +527,6 @@ if tab_admin is not None:
                 "Admins/Mods ලට පමණක් (Admins Only)"
             ] + all_emails
             
-            # Super Admin කෙනෙක් නම් තවත් Super Admin ට යවන්න පුළුවන්
             if st.session_state.user_role == 1 and st.session_state.user_email.lower() != ADMIN_EMAIL.lower():
                  target_options.append(ADMIN_EMAIL)
                  
@@ -640,7 +553,6 @@ if tab_admin is not None:
                     full_msg = f"📢 [{sender_label} පණිවිඩය: {st.session_state.user_email}]\n{admin_msg}"
                     
                     for t in targets:
-                        # තමන්ටම යවා ගැනීම වැළැක්වීම
                         if t.lower() != st.session_state.user_email.lower():
                             add_notification(t, full_msg)
                         
@@ -654,7 +566,6 @@ if tab_admin is not None:
             st.info("පරිශීලකයින් හමු නොවීය.")
         else:
             for user_id, email, phone, password, role_int in users:
-                # Super admin details hide for others
                 if email.lower() == ADMIN_EMAIL.lower() and st.session_state.user_email.lower() != ADMIN_EMAIL.lower(): 
                     continue
                 
@@ -699,17 +610,15 @@ if tab_admin is not None:
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
 # -----------------------------------------------------------------------------------------------------
 
-# 🔥 AI එකේ මතකයෙන් BlackTechX සහ HacxGPT මකා දැමීම සහ වැරදි වාක්‍ය නිවැරදි කිරීම 🔥
 def sanitize_text(text):
     text = re.sub(r'(?i)BlackTechX', 'Pradeep Hacx', text)
     text = re.sub(r'(?i)HacxGPT', 'Pradeep Hacx AI', text)
-    # පරිශීලකයා ඉල්ලූ විශේෂිත පරස්පර වාක්‍යය නිවැරදි කිරීම
     text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
-        st.session_state.messages = load_chat(st.session_state.user_email, st.session_state.current_chat_id)
+        st.session_state.messages = load_chat(st.session_state.current_chat_id)
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -728,22 +637,17 @@ with tab_chat:
 
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
         attachments = []
-        active_parts = [{"text": prompt}]
         
         if uploaded_file:
             file_bytes = uploaded_file.getvalue()
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
-            active_parts.append({"inline_data": {"mime_type": uploaded_file.type, "data": b64_data}})
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
             b64_data = base64.b64encode(voice_bytes).decode("utf-8")
             attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
-            active_parts.append({"inline_data": {"mime_type": voice_file.type, "data": b64_data}})
             
-        st.session_state.active_parts = active_parts
-        
         with st.chat_message("user"):
             st.markdown(prompt)
             if uploaded_file:
@@ -769,9 +673,9 @@ with tab_chat:
             
             try:
                 clean_key = st.session_state.saved_api_key.strip()
-                enhanced_prompt = prompt + "\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
-
+                
                 try:
+                    # HacxBrain එක භාවිතා කරන්නේ නම් (For non-native configs)
                     if not os.path.exists(Config.ENV_FILE):
                          with open(Config.ENV_FILE, 'w') as f: f.write("")
                     set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
@@ -781,28 +685,31 @@ with tab_chat:
                     brain = HacxBrain(clean_key)
                     brain.model = model 
                     
-                    generator = brain.chat(enhanced_prompt)
+                    context_prompt = "Previous Conversation Context:\n"
+                    for m in st.session_state.messages[-6:-1]:  
+                        context_prompt += f"{m['role'].capitalize()}: {m['content']}\n"
+                    context_prompt += f"\nCurrent User Message: {prompt}\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
+                    
+                    generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
                         message_placeholder.markdown(sanitize_text(full_response) + "▌")
                     message_placeholder.markdown(sanitize_text(full_response))
 
                 except NameError:
+                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම (Memory 100% වැඩ කරන ක්‍රමය)
                     brain = NativeGeminiCompletions(clean_key)
+                    temp_messages = list(st.session_state.messages) 
                     
-                    temp_messages = list(st.session_state.messages)
-                    if temp_messages and temp_messages[-1]["role"] == "user":
-                        temp_messages[-1]["content"] = enhanced_prompt
-                        
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
                     message_placeholder.markdown(sanitize_text(full_response))
                 
             except Exception as e:
                 st.error(f"❌ {e}")
-                full_response = str(e)
+                full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
                 
-        st.session_state.messages.append({"role": "assistant", "content": sanitize_text(full_response)})
+        st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
         if len(st.session_state.messages) == 2: 
