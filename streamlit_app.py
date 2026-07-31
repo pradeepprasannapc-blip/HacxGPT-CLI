@@ -33,7 +33,6 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
-        # 🔥 පරණ මැසේජ් ඔක්කොම AI එකට මතක හිටින්න හරියටම Format කරන කොටස 🔥
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
@@ -42,41 +41,44 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             parts = [{"text": m["content"]}]
             
-            # පරණ ෆොටෝ/වොයිස් තිබ්බොත් ඒවත් AI එකට මතක් කරලා දෙනවා
             if "attachments" in m:
                 for att in m["attachments"]:
                     parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Realistic Photos & Image Editing Rule) 🔥
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Super Realistic & Advanced Editing Rules) 🔥
         identity_prompt = """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English.
 
 NEW RULE FOR IMAGE GENERATION & EDITING:
-If the user explicitly asks to create, draw, or generate a photo, OR if they upload a photo and ask you to edit/change something in it:
-1. You must reply naturally in Sinhala.
-2. At the very end of your response, include an English prompt for an image generator enclosed in [IMAGE: "prompt"] tags.
-CRITICAL REALISM RULE: The prompt MUST be highly detailed and photorealistic. Always append the following exact phrases to your English prompt: ", ultra-realistic, 8k resolution, raw photo, taken with DSLR, highly detailed, photorealistic, cinematic lighting, sharp focus".
-EDITING RULE: If the user uploaded an image and wants it edited, thoroughly analyze the original image. Write a complete prompt that vividly describes the entire original scene, but incorporate the user's requested changes seamlessly into the description.
-Example: 
-User: "මට ලස්සන මලක ෆොටෝ එකක් හදලා දෙන්න."
-Your reply: "මෙන්න මම ඔයාට හදපු ලස්සන මලේ ෆොටෝ එක! [IMAGE: "A beautiful glowing red rose in a magical forest, ultra-realistic, 8k resolution, raw photo, taken with DSLR, highly detailed, photorealistic, cinematic lighting, sharp focus"]"
+If the user asks to create a photo, OR if they upload a photo and ask to change clothes/edit it:
+1. Reply naturally in Sinhala.
+2. At the very end, include an English prompt enclosed in [IMAGE: "prompt"] tags.
+CRITICAL REALISM RULE: The generated image must look EXACTLY like a real high-end photograph. Always append this exact phrase to your English prompt: ", highly detailed masterpiece, extremely photorealistic, intricate details, highly realistic textures, cinematic lighting, 8k resolution, raw photo, taken with DSLR, lifelike".
+EDITING RULE (IMPORTANT): If the user uploaded an image to edit (e.g., change clothes), you MUST thoroughly analyze the original image. Write a complete prompt that EXACTLY describes the person's face, skin tone, body shape, pose, hair, and the background of the original image, but seamlessly apply the user's requested new clothing. This ensures the final output looks like the exact same person.
 """
         
-        if system_text: system_text = identity_prompt + "\n\n" + system_text
-        else: system_text = identity_prompt
+        if system_text:
+            system_text = identity_prompt + "\n\n" + system_text
+        else:
+            system_text = identity_prompt
         
         payload = {"contents": contents}
-        if system_text: payload["system_instruction"] = {"parts": [{"text": system_text}]}
+        if system_text:
+            payload["system_instruction"] = {"parts": [{"text": system_text}]}
         
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
         
-        if res.status_code == 503: raise Exception("Google සර්වර් මේ වෙලාවේ කාර්යබහුලයි (High Demand). තත්පර කිහිපයකින් නැවත උත්සාහ කරන්න.")
-        elif res.status_code != 200: raise Exception(f"API Error {res.status_code}: {res.text}")
+        if res.status_code == 503:
+            raise Exception("Google සර්වර් මේ වෙලාවේ කාර්යබහුලයි (High Demand). තත්පර කිහිපයකින් නැවත උත්සාහ කරන්න.")
+        elif res.status_code != 200:
+            raise Exception(f"API Error {res.status_code}: {res.text}")
         
-        try: text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError): text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."
+        try:
+            text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."
             
         return [MockResponse(text)] if stream else MockResponse(text)
 
@@ -107,7 +109,6 @@ except KeyError:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
 components.html(
     """<script>
     setInterval(function() {
@@ -124,7 +125,6 @@ components.html(
     </script>""", height=0, width=0,
 )
 
-# --- 🔥 UI & CSS 🔥 ---
 st.markdown("""
 <style>
 header { display: none !important; }
@@ -156,20 +156,21 @@ try:
     Security.encrypt = lambda text: text
     Security.decrypt = lambda text: text
     brain_module.Client = NativeClient
-except ImportError: pass
+except ImportError:
+    pass
 
 # =====================================================================================================
-# 🔐 --- දත්ත සමුදාය (Supabase Database Functions) --- 🔐
+# 🔐 --- දත්ත සමුදාය (Supabase Database Functions - History Fixed!) --- 🔐
 # =====================================================================================================
 def add_user(email, phone, password):
     try:
-        supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
+        supabase.table("users").insert({"email": email.strip().lower(), "phone": phone, "password": password}).execute()
         return True
     except Exception: return False
 
 def verify_user(email, password):
     try:
-        res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.lower()).execute()
+        res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.strip().lower()).execute()
         if res.data and res.data[0]["password"] == password:
             return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
     except Exception: pass
@@ -177,7 +178,7 @@ def verify_user(email, password):
 
 def find_user_by_email(email):
     try:
-        res = supabase.table("users").select("email, phone").eq("email", email.lower()).execute()
+        res = supabase.table("users").select("email, phone").eq("email", email.strip().lower()).execute()
         if res.data: return (res.data[0]["email"], res.data[0]["phone"])
     except Exception: pass
     return None
@@ -199,7 +200,7 @@ def delete_user_by_id(user_id):
     try:
         res = supabase.table("users").select("email").eq("id", user_id).execute()
         if res.data:
-            user_email = res.data[0]["email"].lower()
+            user_email = res.data[0]["email"].strip().lower()
             supabase.table("chats").delete().eq("email", user_email).execute()
             supabase.table("users").delete().eq("id", user_id).execute()
         return True
@@ -220,16 +221,16 @@ def update_user_role(user_id, role_int):
     except Exception: return False
 
 def update_user_api_key(email, api_key):
-    try: supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
+    try: supabase.table("users").update({"api_key": api_key}).eq("email", email.strip().lower()).execute()
     except Exception: pass
 
 def add_notification(target_email, message):
-    try: supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
+    try: supabase.table("notifications").insert({"email": target_email.strip().lower(), "message": message}).execute()
     except Exception: pass
 
 def get_my_notifications(email):
     try:
-        res = supabase.table("notifications").select("id, message").eq("email", email.lower()).order("id", desc=True).execute()
+        res = supabase.table("notifications").select("id, message").eq("email", email.strip().lower()).order("id", desc=True).execute()
         return [(r["id"], r["message"]) for r in res.data]
     except Exception: return []
 
@@ -239,9 +240,11 @@ def delete_notification(notif_id):
 
 def get_user_chats(email):
     try:
-        res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
+        res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.strip().lower()).order("updated_at", desc=True).execute()
         return res.data
-    except Exception: return []
+    except Exception as e:
+        print(f"Fetch Chat Error: {e}")
+        return []
 
 def load_chat(chat_id):
     try:
@@ -253,16 +256,19 @@ def load_chat(chat_id):
 def save_chat(email, chat_id, messages):
     try:
         existing = supabase.table("chats").select("id").eq("chat_id", chat_id).execute()
-        if existing.data: supabase.table("chats").update({"messages": messages, "updated_at": "now()"}).eq("chat_id", chat_id).execute()
-        else: supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
-    except Exception: pass
+        if existing.data: 
+            supabase.table("chats").update({"messages": messages, "updated_at": "now()"}).eq("chat_id", chat_id).execute()
+        else: 
+            supabase.table("chats").insert({"email": email.strip().lower(), "chat_id": chat_id, "messages": messages}).execute()
+    except Exception as e:
+        print("Chat save error:", e)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
-    st.session_state.latest_img_url = "" # අලුත් ෆොටෝ URL එක සේව් කරන්න
+    st.session_state.latest_img_url = ""
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -279,17 +285,26 @@ if not st.session_state.logged_in:
             login_email = st.text_input("Email ලිපිනය", placeholder="example@mail.com")
             login_password = st.text_input("මුරපදය (Password)", type="password")
             submitted = st.form_submit_button("ඇතුලත් වන්න", use_container_width=True)
+            
             if submitted:
                 if login_email and login_password:
-                    if login_email.lower() == ADMIN_EMAIL.lower() and login_password == ADMIN_PASSWORD:
-                         st.session_state.logged_in = True; st.session_state.user_email = login_email; st.session_state.user_role = 1; st.session_state.current_chat_id = str(uuid.uuid4()); st.session_state.messages = []
+                    if login_email.strip().lower() == ADMIN_EMAIL.strip().lower() and login_password == ADMIN_PASSWORD:
+                         st.session_state.logged_in = True
+                         st.session_state.user_email = login_email.strip().lower()
+                         st.session_state.user_role = 1
+                         st.session_state.current_chat_id = str(uuid.uuid4())
+                         st.session_state.messages = []
                          try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
                          except KeyError: st.session_state.saved_api_key = ""
                          st.rerun()
                     
                     user = verify_user(login_email, login_password)
                     if user:
-                        st.session_state.logged_in = True; st.session_state.user_email = user["email"]; st.session_state.user_role = user["role_int"]; st.session_state.current_chat_id = str(uuid.uuid4()); st.session_state.messages = []
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = user["email"]
+                        st.session_state.user_role = user["role_int"]
+                        st.session_state.current_chat_id = str(uuid.uuid4())
+                        st.session_state.messages = []
                         if user["api_key"]: st.session_state.saved_api_key = user["api_key"]
                         else:
                             try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
@@ -354,16 +369,23 @@ with tab_history:
     st.markdown("### 💬 Your Chats (ඔබගේ පැරණි කතා)")
     if st.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True, type="primary"):
         st.session_state.current_chat_id = str(uuid.uuid4()); st.session_state.messages = []; st.rerun()
+        
+    if not chat_records:
+        st.info("ඔබට පැරණි කතා කිසිවක් හමු නොවීය.")
+        
     for record in chat_records:
         chat_id = record["chat_id"]
         msgs = record["messages"]
         title = "Empty Chat"
         for m in msgs:
             if m["role"] == "user":
-                title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]; break
+                title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
+                break
         prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
         if st.button(f"{prefix}{title}", key=f"hist_{chat_id}", use_container_width=True):
-            st.session_state.current_chat_id = chat_id; st.session_state.messages = msgs; st.rerun()
+            st.session_state.current_chat_id = chat_id
+            st.session_state.messages = msgs
+            st.rerun()
 
 with tab_settings:
     role_name = "User"
@@ -492,7 +514,6 @@ def sanitize_text(text):
 
 def render_message(role, content, attachments=None):
     with st.chat_message(role):
-        # ටැග් එක අකුරු වලින් පෙන්නන එක නවත්තන්න මෙතනින් ඒක ගලවනවා
         image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', content, flags=re.IGNORECASE | re.DOTALL)
         clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', content, flags=re.IGNORECASE | re.DOTALL)
         
@@ -505,11 +526,9 @@ def render_message(role, content, attachments=None):
                 elif att["type"].startswith("video/"): st.video(raw_bytes)
                 elif att["type"].startswith("audio/"): st.audio(raw_bytes)
                 
-        # අර ගලවපු ටැග් එකෙන් ෆොටෝ එකක් කෙලින්ම පෙන්නනවා (Realistic Prompt & Random Seed for uniqueness)
         for img_prompt in image_matches:
             seed = random.randint(1, 999999)
             img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=1024&height=1024&nologo=true&seed={seed}"
-            # අවශ්‍ය නම් පරණ අප්ලෝඩ් කරපු ෆොටෝ එකේ URL එක අමුණන්න
             if st.session_state.latest_img_url:
                 img_url += f"&image={st.session_state.latest_img_url}"
             st.image(img_url)
@@ -518,7 +537,6 @@ with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         st.session_state.messages = load_chat(st.session_state.current_chat_id)
 
-    # පරණ මැසේජ් පෙන්නන කොටස (දැන් මේකෙත් ෆොටෝ වැඩ කරනවා)
     for message in st.session_state.messages:
         render_message(message["role"], message["content"], message.get("attachments"))
 
@@ -544,9 +562,12 @@ with tab_chat:
                     c_res = requests.post(catbox_url, data=data, files=files)
                     if c_res.status_code == 200:
                         st.session_state.latest_img_url = c_res.text.strip()
-                        st.toast("✅ රූපය සාර්ථකව කියවන ලදී!", icon="👀")
+                        st.toast("✅ රූපය සාර්ථකව කියවන ලදී! ඔබට දැන් Edit කිරීමට අණ කළ හැක.", icon="👀")
+                    else:
+                        st.toast("⚠️ රූපය කියවීම අසාර්ථකයි.", icon="❌")
                 except Exception as e:
                     print("Catbox Upload Error:", e)
+                    st.toast("⚠️ අන්තර්ජාල දෝෂයක්. රූපය කියවිය නොහැක.", icon="❌")
             # ------------------------------------------------------------------
             
         if voice_file:
@@ -571,7 +592,6 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # අලුත් රිප්ලයි එක හදන කොටස
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
@@ -615,7 +635,6 @@ with tab_chat:
                     seed = random.randint(1, 999999)
                     img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=1024&height=1024&nologo=true&seed={seed}"
                     
-                    # ඇඳුම් මාරු කරනවා වගේ (Image-to-Image) වැඩ වලට Auto URL එක පාවිච්චි කිරීම
                     if st.session_state.latest_img_url:
                         img_url += f"&image={st.session_state.latest_img_url}"
                         
