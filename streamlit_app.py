@@ -6,8 +6,8 @@ import json
 import uuid
 import base64
 import re
+import random
 from supabase import create_client, Client
-import hacx_magic # 🔥 අලුතෙන් හදපු ෆයිල් එක මෙතනින් Import කරා
 
 # =====================================================================================================
 # 🧠 --- AI Brain/Engine කොටස (With Conversation Memory) --- 🧠
@@ -49,8 +49,8 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (අලුත් ෆයිල් එකෙන් ගන්නවා) 🔥
-        identity_prompt = hacx_magic.get_boss_prompt()
+        # 🔥 ඔයාගේ ORIGINAL මොළය (කිසිම නීතියක් නෑ, පින්තූරයක් ඉල්ලුවොත් ටැග් එක දාන්න විතරක් කිව්වා) 🔥
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English. (පරිශීලකයා පින්තූරයක් ඉල්ලුවහොත් පමණක්, ඔබේ පිළිතුර අගට [IMAGE: \"english description\"] ලෙස එක් කරන්න)."
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -301,7 +301,6 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
-    st.session_state.latest_img_url = "" # අලුත් ෆයිල් එකේ දේවල් වලට
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -624,13 +623,17 @@ with tab_chat:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            if message["role"] == "model":
-                # 🔥 අලුත් ෆයිල් එකෙන් පරණ ෆොටෝස් ටික පෙන්නනවා
-                clean_msg = hacx_magic.display_and_clean_text(message["content"], is_history=True)
-                st.markdown(sanitize_text(clean_msg))
-            else:
-                st.markdown(sanitize_text(message["content"]))
-                
+            
+            # 🔥 UI එකේ පින්තූර ටැග් එක හංගලා රූපය පෙන්වීම 🔥
+            clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', message["content"], flags=re.IGNORECASE | re.DOTALL)
+            st.markdown(sanitize_text(clean_text))
+            
+            image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', message["content"], flags=re.IGNORECASE | re.DOTALL)
+            for img_prompt in image_matches:
+                seed = random.randint(1, 999999)
+                img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
+                st.image(img_url)
+
             if "attachments" in message:
                 for att in message["attachments"]:
                     raw_bytes = base64.b64decode(att["data"])
@@ -650,13 +653,6 @@ with tab_chat:
             file_bytes = uploaded_file.getvalue()
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
-            
-            # 🔥 අලුත් ෆයිල් එකෙන් Image Upload එක කරනවා
-            if uploaded_file.type.startswith("image/"):
-                url = hacx_magic.upload_image(file_bytes, uploaded_file.name, uploaded_file.type)
-                if url:
-                    st.session_state.latest_img_url = url
-                    st.toast("✅ රූපය සාර්ථකව කියවන ලදී!", icon="👀")
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -708,11 +704,11 @@ with tab_chat:
                     generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        display = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                        message_placeholder.markdown(sanitize_text(display) + "▌")
                         
-                    # 🔥 අලුත් ෆයිල් එකෙන් ෆොටෝස් හදලා පෙන්නනවා 🔥
-                    clean_res = hacx_magic.display_and_clean_text(full_response, st.session_state.get("latest_img_url", ""), is_history=False)
+                        display_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
+                        message_placeholder.markdown(sanitize_text(display_text) + "▌")
+                        
+                    clean_res = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
                     message_placeholder.markdown(sanitize_text(clean_res))
 
                 except NameError:
@@ -723,9 +719,17 @@ with tab_chat:
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
                     
-                    clean_res = hacx_magic.display_and_clean_text(full_response, st.session_state.get("latest_img_url", ""), is_history=False)
+                    clean_res = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
                     message_placeholder.markdown(sanitize_text(clean_res))
                 
+                # 🔥 අලුත් රූප ජනනය කිරීමේ ක්‍රියාවලිය 🔥
+                image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', full_response, flags=re.IGNORECASE | re.DOTALL)
+                for img_prompt in image_matches:
+                    st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
+                    seed = random.randint(1, 999999)
+                    img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
+                    st.image(img_url)
+
             except Exception as e:
                 st.error(f"❌ {e}")
                 full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
@@ -733,9 +737,6 @@ with tab_chat:
                 
         st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
-        
-        # ලින්ක් එක Clear කිරීම
-        st.session_state.latest_img_url = ""
         
         if len(st.session_state.messages) == 2: 
             st.rerun()
