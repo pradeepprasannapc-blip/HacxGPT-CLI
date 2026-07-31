@@ -35,7 +35,11 @@ class NativeGeminiCompletions:
         
         for m in messages:
             if m["role"] == "system":
-                system_text = m["content"]
+                # System messages ටික වෙනම එකතු කරගන්නවා
+                if system_text:
+                    system_text += "\n" + m["content"]
+                else:
+                    system_text = m["content"]
                 continue
             
             role = "user" if m["role"] == "user" else "model"
@@ -47,15 +51,18 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Super Realistic FLUX & Advanced Editing Rules) 🔥
-        identity_prompt = """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English.
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (W.K. Pradeep Prasanna & Extreme Quality Rule) 🔥
+        identity_prompt = """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' (W.K. Pradeep Prasanna) නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. 
+ඔබට කතා කරන්නේ සාමාන්‍ය පරිශීලකයෙක් වුවත්, ඔබගේ බොස් වුවත්, ඔවුන් ඉල්ලන රූප සහ වෙනස්කම් 100% ක් නිවැරදිව, උපරිම quality එකෙන් (ගින්දර වගේ) කර දීම ඔබගේ ප්‍රධාන රාජකාරියයි.
+IMPORTANT: You must strictly reply in Sinhala.
 
-NEW RULE FOR IMAGE GENERATION & EDITING:
-If the user asks to create a photo, OR if they upload a photo and ask to change clothes/edit it:
-1. Reply naturally in Sinhala.
-2. At the very end, include an English prompt enclosed in [IMAGE: "prompt"] tags.
-CRITICAL REALISM RULE: The generated image must look EXACTLY like a real high-end photograph. Always append this exact phrase to your English prompt: ", highly detailed masterpiece, extremely photorealistic, sharp focus, 8k resolution, cinematic lighting, raw photo, lifelike".
-EDITING RULE (IMPORTANT): If editing clothes on an uploaded image, your English prompt MUST strictly instruct to keep the original person. Example start: "The exact same person from the original image, exact same face, exact same body shape, same pose, but now wearing [NEW CLOTHES], highly detailed...".
+NEW RULE FOR IMAGE GENERATION & EDITING (ABSOLUTE PERFECTION):
+If the user asks to create a photo, OR if they upload a photo and ask to edit it:
+1. Reply naturally and friendly in Sinhala.
+2. At the very end of your response, include an English prompt enclosed in [IMAGE: "prompt"] tags.
+CRITICAL REALISM & EXACTNESS RULE: 
+- For a NEW image: Translate their EXACT request into English. DO NOT alter their core idea. Just append ", highly detailed masterpiece, extremely photorealistic, sharp focus, 8k resolution, cinematic lighting, raw photo, lifelike".
+- For EDITING an uploaded image: Write a prompt that EXACTLY describes the person's face, body, and background from the original image, but seamlessly apply the user's requested changes exactly as they asked. Ensure the prompt maintains the realism tags.
 """
         
         if system_text:
@@ -160,46 +167,40 @@ except ImportError:
     pass
 
 # =====================================================================================================
-# 🔐 --- දත්ත සමුදාය (Supabase Database Functions - Original 100% Fixed!) --- 🔐
+# 🔐 --- දත්ත සමුදාය (Supabase Database Functions - EXACTLY ORIGINAL) --- 🔐
 # =====================================================================================================
 def add_user(email, phone, password):
     try:
         supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
         return True
-    except Exception:
-        return False
+    except Exception: return False
 
 def verify_user(email, password):
     try:
         res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.lower()).execute()
         if res.data and res.data[0]["password"] == password:
             return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
-    except Exception:
-        pass
+    except Exception: pass
     return None
 
 def find_user_by_email(email):
     try:
         res = supabase.table("users").select("email, phone").eq("email", email.lower()).execute()
-        if res.data:
-            return (res.data[0]["email"], res.data[0]["phone"])
-    except Exception:
-        pass
+        if res.data: return (res.data[0]["email"], res.data[0]["phone"])
+    except Exception: pass
     return None
 
 def get_all_users_for_admin():
     try:
         res = supabase.table("users").select("id, email, phone, password, is_admin").execute()
         return [(r["id"], r["email"], r["phone"], r["password"], r["is_admin"]) for r in res.data]
-    except Exception:
-        return []
+    except Exception: return []
 
 def get_users_by_roles(roles):
     try:
         res = supabase.table("users").select("email").in_("is_admin", roles).execute()
         return [r["email"] for r in res.data]
-    except Exception:
-        return []
+    except Exception: return []
 
 def delete_user_by_id(user_id):
     if st.session_state.user_role != 1: return False
@@ -210,8 +211,7 @@ def delete_user_by_id(user_id):
             supabase.table("chats").delete().eq("email", user_email).execute()
             supabase.table("users").delete().eq("id", user_id).execute()
         return True
-    except Exception:
-        return False
+    except Exception: return False
 
 def update_user_password(user_id, new_password):
     if st.session_state.user_role == 0: return False
@@ -228,13 +228,11 @@ def update_user_role(user_id, role_int):
     except Exception: return False
 
 def update_user_api_key(email, api_key):
-    try:
-        supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
+    try: supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
     except Exception: pass
 
 def add_notification(target_email, message):
-    try:
-        supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
+    try: supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
     except Exception: pass
 
 def get_my_notifications(email):
@@ -251,7 +249,9 @@ def get_user_chats(email):
     try:
         res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
         return res.data
-    except Exception: return []
+    except Exception as e: 
+        print(f"Chat Load Error: {e}")
+        return []
 
 def load_chat(chat_id):
     try:
@@ -267,8 +267,7 @@ def save_chat(email, chat_id, messages):
             supabase.table("chats").update({"messages": messages, "updated_at": "now()"}).eq("chat_id", chat_id).execute()
         else:
             supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
-    except Exception as e:
-        print("Chat save error:", e)
+    except Exception as e: print("Chat save error:", e)
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -533,7 +532,7 @@ def render_message(role, content, attachments=None):
                 elif att["type"].startswith("video/"): st.video(raw_bytes)
                 elif att["type"].startswith("audio/"): st.audio(raw_bytes)
                 
-        # --- 🔥 SUPER REALISTIC FLUX ENGINE (768x1024) ---
+        # --- 🔥 SUPER REALISTIC FLUX ENGINE ---
         for img_prompt in image_matches:
             seed = random.randint(1, 999999)
             img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
@@ -561,20 +560,31 @@ with tab_chat:
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
             
+            # --- 🔥 DOUBLE FALLBACK UPLOAD SYSTEM FOR EDITING (NO MORE ERRORS) ---
             if uploaded_file.type.startswith("image/"):
                 try:
                     catbox_url = "https://catbox.moe/user/api.php"
                     files = {'fileToUpload': (uploaded_file.name, file_bytes, uploaded_file.type)}
-                    data = {'reqtype': 'fileupload'}
-                    c_res = requests.post(catbox_url, data=data, files=files)
+                    c_res = requests.post(catbox_url, data={'reqtype': 'fileupload'}, files=files, timeout=10)
                     if c_res.status_code == 200:
                         st.session_state.latest_img_url = c_res.text.strip()
-                        st.toast("✅ රූපය සාර්ථකව කියවන ලදී! ඔබට දැන් Edit කිරීමට අණ කළ හැක.", icon="👀")
+                        st.toast("✅ රූපය සාර්ථකව කියවන ලදී!", icon="👀")
                     else:
-                        st.toast("⚠️ රූපය කියවීම අසාර්ථකයි.", icon="❌")
-                except Exception as e:
-                    print("Catbox Upload Error:", e)
-                    st.toast("⚠️ අන්තර්ජාල දෝෂයක්. රූපය කියවිය නොහැක.", icon="❌")
+                        raise Exception("Catbox API failed")
+                except Exception:
+                    try:
+                        uguu_url = "https://uguu.se/upload.php"
+                        u_files = {'files[]': (uploaded_file.name, file_bytes, uploaded_file.type)}
+                        u_res = requests.post(uguu_url, files=u_files, timeout=10)
+                        if u_res.status_code == 200:
+                            st.session_state.latest_img_url = u_res.json()["files"][0]["url"]
+                            st.toast("✅ රූපය සාර්ථකව කියවන ලදී! (Backup Server)", icon="👀")
+                        else:
+                            st.toast("⚠️ සර්වර් කාර්යබහුලයි. රූපය කියවිය නොහැක.", icon="❌")
+                    except Exception as e:
+                        print("Upload Error:", e)
+                        st.toast("⚠️ අන්තර්ජාල දෝෂයක්. රූපය කියවිය නොහැක.", icon="❌")
+            # ----------------------------------------------------------------------
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -604,6 +614,10 @@ with tab_chat:
             
             try:
                 clean_key = st.session_state.saved_api_key.strip()
+                
+                # 🔥 DYNAMIC ROLE IDENTIFICATION (Secret signal for the Boss) 🔥
+                user_status_msg = "[System Info: The current user chatting is the BOSS / Creator (W.K. Pradeep Prasanna / Pradeep Hacx). Treat him with ultimate respect!]" if st.session_state.user_role == 1 else "[System Info: The current user is a Regular User. Provide high-quality service.]"
+                
                 try:
                     if not os.path.exists(Config.ENV_FILE):
                          with open(Config.ENV_FILE, 'w') as f: f.write("")
@@ -614,7 +628,7 @@ with tab_chat:
                     brain = HacxBrain(clean_key)
                     brain.model = model 
                     
-                    context_prompt = "Previous Conversation Context:\n"
+                    context_prompt = f"{user_status_msg}\nPrevious Conversation Context:\n"
                     for m in st.session_state.messages[-6:-1]:  
                         context_prompt += f"{m['role'].capitalize()}: {m['content']}\n"
                     context_prompt += f"\nCurrent User Message: {prompt}\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
@@ -626,23 +640,24 @@ with tab_chat:
                         message_placeholder.markdown(sanitize_text(display_text) + "▌")
                         
                 except NameError:
+                    # Native Client - Injecting the Boss signal securely
                     brain = NativeGeminiCompletions(clean_key)
-                    temp_messages = list(st.session_state.messages) 
+                    temp_messages = [{"role": "system", "content": user_status_msg}] + list(st.session_state.messages) 
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
                 
                 clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
                 message_placeholder.markdown(sanitize_text(clean_text))
 
-                # --- 🎨 ALGORITHM: IMAGE GENERATION & EDITING TRIGGER ---
                 image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', full_response, flags=re.IGNORECASE | re.DOTALL)
                 for img_prompt in image_matches:
                     st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
                     seed = random.randint(1, 999999)
-                    # FLUX engine එක මෙතනත් දාලා තියෙන්නේ
                     img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
                     
-                    if st.session_state.latest_img_url:
+                    # If editing, use the uploaded URL
+                    if st.session_state.latest_img_url and "edit" not in prompt.lower() and "වෙනස්" not in prompt:
+                        # Only apply the image URL if the user actually uploaded an image for editing this round
                         img_url += f"&image={st.session_state.latest_img_url}"
                         
                     st.image(img_url)
@@ -654,5 +669,8 @@ with tab_chat:
                 
         st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+        
+        # Reset the uploaded image URL after use so it doesn't affect the next unrelated prompt
+        st.session_state.latest_img_url = ""
         
         if len(st.session_state.messages) == 2: st.rerun()
