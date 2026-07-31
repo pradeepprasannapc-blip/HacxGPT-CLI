@@ -48,8 +48,15 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt & Image Generation Rule) 🔥
+        identity_prompt = """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English.
+
+NEW RULE FOR IMAGE GENERATION:
+If the user explicitly asks to create, draw, or generate a photo/image, you must reply naturally in Sinhala AND at the very end of your response, include an English prompt for an image generator enclosed in [IMAGE: "prompt"] tags.
+Example: 
+User: "මට ලස්සන මලක ෆොටෝ එකක් හදලා දෙන්න."
+Your reply: "මෙන්න මම ඔයාට හදපු ලස්සන මලේ ෆොටෝ එක! [IMAGE: "A beautiful glowing red rose in a magical forest, cinematic lighting, 4k resolution"]"
+"""
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -693,22 +700,46 @@ with tab_chat:
                     generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        message_placeholder.markdown(sanitize_text(full_response) + "▌")
-                    message_placeholder.markdown(sanitize_text(full_response))
-
+                        # ටැග් එක තියෙනවා නම් ඒක hide කරලා පෙන්නන්න (Live typing)
+                        display_text = re.sub(r'\[IMAGE:\s*"(.*?)"\]', '', full_response)
+                        message_placeholder.markdown(sanitize_text(display_text) + "▌")
+                        
                 except NameError:
-                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම (Memory 100% වැඩ කරන ක්‍රමය)
+                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම
                     brain = NativeGeminiCompletions(clean_key)
                     temp_messages = list(st.session_state.messages) 
                     
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
-                    message_placeholder.markdown(sanitize_text(full_response))
+                
+                # --- 🔥 ALGORITHM: IMAGE GENERATION TRIGGER 🔥 ---
+                image_match = re.search(r'\[IMAGE:\s*"(.*?)"\]', full_response)
+                clean_text = re.sub(r'\[IMAGE:\s*"(.*?)"\]', '', full_response) # රහස් ටැග් එක ඉවත් කිරීම
+                
+                message_placeholder.markdown(sanitize_text(clean_text)) # පිරිසිදු සිංහල පිළිතුර පෙන්නන්න
+
+                if image_match:
+                    image_prompt = image_match.group(1)
+                    st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
+                    try:
+                        # Pollinations AI භාවිතයෙන් රූපය ගැනීම (Free / No API Key required)
+                        img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(image_prompt)}?width=1024&height=1024&nologo=true"
+                        img_res = requests.get(img_url)
+                        
+                        if img_res.status_code == 200:
+                            st.image(img_res.content, caption=f"Generated Prompt: {image_prompt}")
+                        else:
+                            st.error("දැනට රූපය ලබාගැනීමට නොහැක.")
+                    except Exception as e:
+                        st.error(f"Image Error: {e}")
+                # -------------------------------------------------
                 
             except Exception as e:
                 st.error(f"❌ {e}")
                 full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
+                message_placeholder.markdown(sanitize_text(full_response))
                 
+        # සම්පූර්ණ (ටැග් සහිත) response එක Database එකට save කරනවා.
         st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
