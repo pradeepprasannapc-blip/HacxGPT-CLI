@@ -6,8 +6,8 @@ import json
 import uuid
 import base64
 import re
-import random
 from supabase import create_client, Client
+import hacx_magic # 🔥 අලුතෙන් හදපු ෆයිල් එක මෙතනින් Import කරා
 
 # =====================================================================================================
 # 🧠 --- AI Brain/Engine කොටස (With Conversation Memory) --- 🧠
@@ -49,17 +49,8 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Boss Recognition & Image Generation) 🔥
-        identity_prompt = """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නොහොත් 'W.K. Pradeep Prasanna' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කතා කරන පරිශීලකයා ඔබගේ නිර්මාතෘ (Boss) වේ. ඔහුට උපරිම ගෞරවයෙන් සහ මිත්‍රශීලීව සිංහලෙන් කතා කරන්න. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx (W.K. Pradeep Prasanna) කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English.
-
-NEW RULE FOR IMAGE GENERATION & EDITING (ABSOLUTE OBEDIENCE):
-If the user (your boss) asks to create a photo, OR if they upload a photo and ask to edit it:
-1. Reply naturally in Sinhala, acknowledging his request.
-2. At the very end of your response, include an English prompt enclosed in [IMAGE: "prompt"] tags.
-CRITICAL REALISM & EXACTNESS RULE: 
-- For a NEW image: Translate their EXACT request into English. DO NOT alter their core idea. Just append ", highly detailed masterpiece, extremely photorealistic, sharp focus, 8k resolution, cinematic lighting, raw photo, lifelike" to make it realistic.
-- For EDITING an UPLOADED image: Write a prompt that EXACTLY describes the person's face, body, and background from the original image, but seamlessly apply the user's requested changes exactly as they asked. Ensure the prompt maintains the realism tags.
-"""
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (අලුත් ෆයිල් එකෙන් ගන්නවා) 🔥
+        identity_prompt = hacx_magic.get_boss_prompt()
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -310,7 +301,7 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
-    st.session_state.latest_img_url = ""
+    st.session_state.latest_img_url = "" # අලුත් ෆයිල් එකේ දේවල් වලට
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -633,21 +624,19 @@ with tab_chat:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', message["content"], flags=re.IGNORECASE | re.DOTALL)
-            st.markdown(sanitize_text(clean_text))
+            if message["role"] == "model":
+                # 🔥 අලුත් ෆයිල් එකෙන් පරණ ෆොටෝස් ටික පෙන්නනවා
+                clean_msg = hacx_magic.display_and_clean_text(message["content"], is_history=True)
+                st.markdown(sanitize_text(clean_msg))
+            else:
+                st.markdown(sanitize_text(message["content"]))
+                
             if "attachments" in message:
                 for att in message["attachments"]:
                     raw_bytes = base64.b64decode(att["data"])
                     if att["type"].startswith("image/"): st.image(raw_bytes)
                     elif att["type"].startswith("video/"): st.video(raw_bytes)
                     elif att["type"].startswith("audio/"): st.audio(raw_bytes)
-            
-            # පරණ මැසේජ් වල ෆොටෝ පෙන්නන්න (FLUX engine)
-            image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', message["content"], flags=re.IGNORECASE | re.DOTALL)
-            for img_prompt in image_matches:
-                seed = random.randint(1, 999999)
-                img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
-                st.image(img_url)
 
     with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
         uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
@@ -662,31 +651,12 @@ with tab_chat:
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
             
-            # --- 🔥 DOUBLE FALLBACK UPLOAD SYSTEM FOR EDITING ---
+            # 🔥 අලුත් ෆයිල් එකෙන් Image Upload එක කරනවා
             if uploaded_file.type.startswith("image/"):
-                try:
-                    catbox_url = "https://catbox.moe/user/api.php"
-                    files = {'fileToUpload': (uploaded_file.name, file_bytes, uploaded_file.type)}
-                    c_res = requests.post(catbox_url, data={'reqtype': 'fileupload'}, files=files, timeout=10)
-                    if c_res.status_code == 200:
-                        st.session_state.latest_img_url = c_res.text.strip()
-                        st.toast("✅ රූපය සාර්ථකව කියවන ලදී! ඔබට දැන් Edit කිරීමට අණ කළ හැක.", icon="👀")
-                    else:
-                        raise Exception("Catbox API failed")
-                except Exception:
-                    try:
-                        uguu_url = "https://uguu.se/upload.php"
-                        u_files = {'files[]': (uploaded_file.name, file_bytes, uploaded_file.type)}
-                        u_res = requests.post(uguu_url, files=u_files, timeout=10)
-                        if u_res.status_code == 200:
-                            st.session_state.latest_img_url = u_res.json()["files"][0]["url"]
-                            st.toast("✅ රූපය සාර්ථකව කියවන ලදී! (Backup Server)", icon="👀")
-                        else:
-                            st.toast("⚠️ සර්වර් කාර්යබහුලයි. රූපය කියවිය නොහැක.", icon="❌")
-                    except Exception as e:
-                        print("Upload Error:", e)
-                        st.toast("⚠️ අන්තර්ජාල දෝෂයක්. රූපය කියවිය නොහැක.", icon="❌")
-            # ---------------------------------------------------
+                url = hacx_magic.upload_image(file_bytes, uploaded_file.name, uploaded_file.type)
+                if url:
+                    st.session_state.latest_img_url = url
+                    st.toast("✅ රූපය සාර්ථකව කියවන ලදී!", icon="👀")
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -738,32 +708,23 @@ with tab_chat:
                     generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        display_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                        message_placeholder.markdown(sanitize_text(display_text) + "▌")
+                        display = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
+                        message_placeholder.markdown(sanitize_text(display) + "▌")
                         
+                    # 🔥 අලුත් ෆයිල් එකෙන් ෆොටෝස් හදලා පෙන්නනවා 🔥
+                    clean_res = hacx_magic.display_and_clean_text(full_response, st.session_state.get("latest_img_url", ""), is_history=False)
+                    message_placeholder.markdown(sanitize_text(clean_res))
+
                 except NameError:
-                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම
+                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම (Memory 100% වැඩ කරන ක්‍රමය)
                     brain = NativeGeminiCompletions(clean_key)
                     temp_messages = list(st.session_state.messages) 
                     
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
-                
-                clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                message_placeholder.markdown(sanitize_text(clean_text))
-
-                # --- 🎨 ALGORITHM: IMAGE GENERATION & EDITING TRIGGER (FLUX ENGINE) ---
-                image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', full_response, flags=re.IGNORECASE | re.DOTALL)
-                for img_prompt in image_matches:
-                    st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
-                    seed = random.randint(1, 999999)
-                    img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
                     
-                    # If editing, use the uploaded URL
-                    if st.session_state.latest_img_url and ("edit" in prompt.lower() or "වෙනස්" in prompt or "මාරු" in prompt or "කරන්න" in prompt):
-                        img_url += f"&image={st.session_state.latest_img_url}"
-                        
-                    st.image(img_url)
+                    clean_res = hacx_magic.display_and_clean_text(full_response, st.session_state.get("latest_img_url", ""), is_history=False)
+                    message_placeholder.markdown(sanitize_text(clean_res))
                 
             except Exception as e:
                 st.error(f"❌ {e}")
@@ -773,7 +734,7 @@ with tab_chat:
         st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
-        # Reset the uploaded image URL after use
+        # ලින්ක් එක Clear කිරීම
         st.session_state.latest_img_url = ""
         
         if len(st.session_state.messages) == 2: 
