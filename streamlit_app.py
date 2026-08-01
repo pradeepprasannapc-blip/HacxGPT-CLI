@@ -6,7 +6,51 @@ import json
 import uuid
 import base64
 import re
+import random
 from supabase import create_client, Client
+
+# =====================================================================================================
+# 🎨 --- AI Image Magic කොටස (hacx magic) --- 🎨
+# =====================================================================================================
+def get_boss_prompt():
+    return """ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නොහොත් 'W.K. Pradeep Prasanna' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කතා කරන පරිශීලකයා ඔබගේ නිර්මාතෘ (Boss) වේ. ඔහුට උපරිම ගෞරවයෙන් සහ මිත්‍රශීලීව සිංහලෙන් කතා කරන්න. 
+IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English.
+
+NEW RULE FOR IMAGE GENERATION & EDITING:
+If the user (your boss) asks to create a photo, OR if they upload a photo and ask to edit it:
+1. Reply naturally in Sinhala, acknowledging his request.
+2. At the very end of your response, include an English prompt enclosed in [IMAGE: "prompt"] tags.
+CRITICAL REALISM & EXACTNESS RULE: 
+- For a NEW image: Translate their EXACT request into English. DO NOT alter their core idea. Just append ", highly detailed masterpiece, extremely photorealistic, sharp focus, 8k resolution, cinematic lighting, raw photo, lifelike" to make it realistic.
+- For EDITING an UPLOADED image: Write a prompt that EXACTLY describes the person's face, body, and background from the original image, but seamlessly apply the user's requested changes exactly as they asked. Ensure the prompt maintains the realism tags."""
+
+def upload_image(file_bytes, file_name, file_type):
+    try:
+        res = requests.post("https://catbox.moe/user/api.php", data={'reqtype': 'fileupload'}, files={'fileToUpload': (file_name, file_bytes, file_type)}, timeout=10)
+        if res.status_code == 200: return res.text.strip()
+    except:
+        pass
+    try:
+        res = requests.post("https://uguu.se/upload.php", files={'files[]': (file_name, file_bytes, file_type)}, timeout=10)
+        if res.status_code == 200: return res.json()["files"][0]["url"]
+    except:
+        pass
+    return ""
+
+def display_and_clean_text(content, latest_img_url="", is_history=False):
+    clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', content, flags=re.IGNORECASE | re.DOTALL)
+    
+    image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', content, flags=re.IGNORECASE | re.DOTALL)
+    for img_prompt in image_matches:
+        if not is_history:
+            st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
+        seed = random.randint(1, 999999)
+        img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
+        if latest_img_url:
+            img_url += f"&image={latest_img_url}"
+        st.image(img_url)
+        
+    return clean_text
 
 # =====================================================================================================
 # 🧠 --- AI Brain/Engine කොටස (With Conversation Memory) --- 🧠
@@ -32,7 +76,6 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
-        # 🔥 පරණ මැසේජ් ඔක්කොම AI එකට මතක හිටින්න හරියටම Format කරන කොටස 🔥
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
@@ -41,15 +84,14 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             parts = [{"text": m["content"]}]
             
-            # පරණ ෆොටෝ/වොයිස් තිබ්බොත් ඒවත් AI එකට මතක් කරලා දෙනවා
             if "attachments" in m:
                 for att in m["attachments"]:
-                    parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
+                    if att.get("data"):
+                        parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        identity_prompt = get_boss_prompt()
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -622,13 +664,19 @@ with tab_chat:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(sanitize_text(message["content"]))
+            if message["role"] == "model":
+                clean_txt = display_and_clean_text(message["content"], is_history=True)
+                st.markdown(sanitize_text(clean_txt))
+            else:
+                st.markdown(sanitize_text(message["content"]))
+                
             if "attachments" in message:
                 for att in message["attachments"]:
-                    raw_bytes = base64.b64decode(att["data"])
-                    if att["type"].startswith("image/"): st.image(raw_bytes)
-                    elif att["type"].startswith("video/"): st.video(raw_bytes)
-                    elif att["type"].startswith("audio/"): st.audio(raw_bytes)
+                    if att.get("data"):
+                        raw_bytes = base64.b64decode(att["data"])
+                        if att["type"].startswith("image/"): st.image(raw_bytes)
+                        elif att["type"].startswith("video/"): st.video(raw_bytes)
+                        elif att["type"].startswith("audio/"): st.audio(raw_bytes)
 
     with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
         uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
@@ -642,6 +690,9 @@ with tab_chat:
             file_bytes = uploaded_file.getvalue()
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+            st.session_state.latest_img_url = upload_image(file_bytes, uploaded_file.name, uploaded_file.type)
+        else:
+            st.session_state.latest_img_url = ""
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -675,7 +726,6 @@ with tab_chat:
                 clean_key = st.session_state.saved_api_key.strip()
                 
                 try:
-                    # HacxBrain එක භාවිතා කරන්නේ නම් (For non-native configs)
                     if not os.path.exists(Config.ENV_FILE):
                          with open(Config.ENV_FILE, 'w') as f: f.write("")
                     set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
@@ -693,24 +743,29 @@ with tab_chat:
                     generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        message_placeholder.markdown(sanitize_text(full_response) + "▌")
-                    message_placeholder.markdown(sanitize_text(full_response))
+                        temp_clean = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
+                        message_placeholder.markdown(sanitize_text(temp_clean) + "▌")
+                        
+                    final_display_text = display_and_clean_text(full_response, st.session_state.latest_img_url, is_history=False)
+                    message_placeholder.markdown(sanitize_text(final_display_text))
 
                 except NameError:
-                    # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම (Memory 100% වැඩ කරන ක්‍රමය)
                     brain = NativeGeminiCompletions(clean_key)
                     temp_messages = list(st.session_state.messages) 
                     
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
-                    message_placeholder.markdown(sanitize_text(full_response))
+                    
+                    final_display_text = display_and_clean_text(full_response, st.session_state.latest_img_url, is_history=False)
+                    message_placeholder.markdown(sanitize_text(final_display_text))
                 
             except Exception as e:
                 st.error(f"❌ {e}")
                 full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
                 
-        st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
+        st.session_state.messages.append({"role": "model", "content": full_response})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
         
         if len(st.session_state.messages) == 2: 
             st.rerun()
+
