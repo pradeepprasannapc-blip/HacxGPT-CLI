@@ -231,7 +231,8 @@ def add_user(email, phone, password):
     try:
         supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ User එකතු කිරීමේ දෝෂයක්: {e}")
         return False
 
 def verify_user(email, password):
@@ -239,8 +240,8 @@ def verify_user(email, password):
         res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.lower()).execute()
         if res.data and res.data[0]["password"] == password:
             return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"⚠️ User Verify දෝෂයක්: {e}")
     return None
 
 def find_user_by_email(email):
@@ -248,22 +249,24 @@ def find_user_by_email(email):
         res = supabase.table("users").select("email, phone").eq("email", email.lower()).execute()
         if res.data:
             return (res.data[0]["email"], res.data[0]["phone"])
-    except Exception:
-        pass
+    except Exception as e:
+        st.error(f"⚠️ Email සෙවීමේ දෝෂයක්: {e}")
     return None
 
 def get_all_users_for_admin():
     try:
         res = supabase.table("users").select("id, email, phone, password, is_admin").execute()
         return [(r["id"], r["email"], r["phone"], r["password"], r["is_admin"]) for r in res.data]
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ Users ලබා ගැනීමේ දෝෂයක්: {e}")
         return []
 
 def get_users_by_roles(roles):
     try:
         res = supabase.table("users").select("email").in_("is_admin", roles).execute()
         return [r["email"] for r in res.data]
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ Roles ලබා ගැනීමේ දෝෂයක්: {e}")
         return []
 
 def delete_user_by_id(user_id):
@@ -275,7 +278,8 @@ def delete_user_by_id(user_id):
             supabase.table("chats").delete().eq("email", user_email).execute()
             supabase.table("users").delete().eq("id", user_id).execute()
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"⚠️ User මකා දැමීමේ දෝෂයක්: {e}")
         return False
 
 def update_user_password(user_id, new_password):
@@ -283,48 +287,60 @@ def update_user_password(user_id, new_password):
     try:
         supabase.table("users").update({"password": new_password}).eq("id", user_id).execute()
         return True
-    except Exception: return False
+    except Exception as e: 
+        st.error(f"⚠️ Password වෙනස් කිරීමේ දෝෂයක්: {e}")
+        return False
 
 def update_user_role(user_id, role_int):
     if st.session_state.user_role != 1: return False
     try:
         supabase.table("users").update({"is_admin": role_int}).eq("id", user_id).execute()
         return True
-    except Exception: return False
+    except Exception as e: 
+        st.error(f"⚠️ Role වෙනස් කිරීමේ දෝෂයක්: {e}")
+        return False
 
 def update_user_api_key(email, api_key):
     try:
         supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
-    except Exception: pass
+    except Exception as e: 
+        st.error(f"⚠️ API Key යාවත්කාලීන කිරීමේ දෝෂයක්: {e}")
 
 # --- Notifications (Supabase) ---
 def add_notification(target_email, message):
     try:
         supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
-    except Exception: pass
+    except Exception as e: 
+        st.error(f"⚠️ Notification යැවීමේ දෝෂයක්: {e}")
 
 def get_my_notifications(email):
     try:
         res = supabase.table("notifications").select("id, message").eq("email", email.lower()).order("id", desc=True).execute()
         return [(r["id"], r["message"]) for r in res.data]
-    except Exception: return []
+    except Exception as e: 
+        st.error(f"⚠️ Notifications ලබා ගැනීමේ දෝෂයක්: {e}")
+        return []
 
 def delete_notification(notif_id):
     try: supabase.table("notifications").delete().eq("id", notif_id).execute()
-    except Exception: pass
+    except Exception as e: 
+        st.error(f"⚠️ Notification මකා දැමීමේ දෝෂයක්: {e}")
 
 # --- Chat Memory (Supabase) ---
 def get_user_chats(email):
     try:
         res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
         return res.data
-    except Exception: return []
+    except Exception as e: 
+        st.error(f"⚠️ Chats ලබා ගැනීමේ දෝෂයක්: {e}")
+        return []
 
 def load_chat(chat_id):
     try:
         res = supabase.table("chats").select("messages").eq("chat_id", chat_id).execute()
         if res.data: return res.data[0]["messages"]
-    except Exception: pass
+    except Exception as e: 
+        st.error(f"⚠️ Chat Load වීමේ දෝෂයක්: {e}")
     return []
 
 def save_chat(email, chat_id, messages):
@@ -335,6 +351,7 @@ def save_chat(email, chat_id, messages):
         else:
             supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
     except Exception as e:
+        st.error(f"⚠️ චැට් එක Save වීමේ දෝෂයක්: {e}")
         print("Chat save error:", e)
 
 if "logged_in" not in st.session_state:
@@ -446,7 +463,7 @@ st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx.
 my_notifications = get_my_notifications(st.session_state.user_email)
 
 if my_notifications:
-    st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා කරන්න.")
+    st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා জ্ঞ කරන්න.")
 
 chat_records = get_user_chats(st.session_state.user_email)
 
