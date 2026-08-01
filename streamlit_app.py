@@ -6,7 +6,6 @@ import json
 import uuid
 import base64
 import re
-import random
 from supabase import create_client, Client
 
 # =====================================================================================================
@@ -49,8 +48,8 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 ඔයාගේ ORIGINAL මොළය (කිසිම නීතියක් නෑ, පින්තූරයක් ඉල්ලුවොත් ටැග් එක දාන්න විතරක් කිව්වා) 🔥
-        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English. (පරිශීලකයා පින්තූරයක් ඉල්ලුවහොත් පමණක්, ඔබේ පිළිතුර අගට [IMAGE: \"english description\"] ලෙස එක් කරන්න)."
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
         
         if system_text:
             system_text = identity_prompt + "\n\n" + system_text
@@ -623,17 +622,7 @@ with tab_chat:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            
-            # 🔥 UI එකේ පින්තූර ටැග් එක හංගලා රූපය පෙන්වීම 🔥
-            clean_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', message["content"], flags=re.IGNORECASE | re.DOTALL)
-            st.markdown(sanitize_text(clean_text))
-            
-            image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', message["content"], flags=re.IGNORECASE | re.DOTALL)
-            for img_prompt in image_matches:
-                seed = random.randint(1, 999999)
-                img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
-                st.image(img_url)
-
+            st.markdown(sanitize_text(message["content"]))
             if "attachments" in message:
                 for att in message["attachments"]:
                     raw_bytes = base64.b64decode(att["data"])
@@ -704,12 +693,8 @@ with tab_chat:
                     generator = brain.chat(context_prompt)
                     for chunk in generator:
                         full_response += chunk
-                        
-                        display_text = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                        message_placeholder.markdown(sanitize_text(display_text) + "▌")
-                        
-                    clean_res = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                    message_placeholder.markdown(sanitize_text(clean_res))
+                        message_placeholder.markdown(sanitize_text(full_response) + "▌")
+                    message_placeholder.markdown(sanitize_text(full_response))
 
                 except NameError:
                     # Native Client එක හරහා සම්පූර්ණ History එක සමග යැවීම (Memory 100% වැඩ කරන ක්‍රමය)
@@ -718,22 +703,11 @@ with tab_chat:
                     
                     res = brain.create(model, temp_messages, stream=False)
                     full_response = res.choices[0].delta.content
-                    
-                    clean_res = re.sub(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', '', full_response, flags=re.IGNORECASE | re.DOTALL)
-                    message_placeholder.markdown(sanitize_text(clean_res))
+                    message_placeholder.markdown(sanitize_text(full_response))
                 
-                # 🔥 අලුත් රූප ජනනය කිරීමේ ක්‍රියාවලිය 🔥
-                image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', full_response, flags=re.IGNORECASE | re.DOTALL)
-                for img_prompt in image_matches:
-                    st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
-                    seed = random.randint(1, 999999)
-                    img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
-                    st.image(img_url)
-
             except Exception as e:
                 st.error(f"❌ {e}")
                 full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
-                message_placeholder.markdown(sanitize_text(full_response))
                 
         st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
         save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
