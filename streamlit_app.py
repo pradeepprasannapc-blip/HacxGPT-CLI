@@ -42,13 +42,24 @@ def display_and_clean_text(content, latest_img_url="", is_history=False):
     
     image_matches = re.findall(r'\[IMAGE:\s*["\']?(.*?)["\']?\]', content, flags=re.IGNORECASE | re.DOTALL)
     for img_prompt in image_matches:
-        if not is_history:
-            st.toast("🎨 AI විසින් රූපයක් නිර්මාණය කරමින් පවතී...", icon="⚙️")
         seed = random.randint(1, 999999)
         img_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(img_prompt.strip())}?width=768&height=1024&nologo=true&seed={seed}&model=flux"
         if latest_img_url:
             img_url += f"&image={latest_img_url}"
-        st.image(img_url)
+            
+        if not is_history:
+            # ෆොටෝ එක එනකම් Loading Spinner එකක් පෙන්වීම
+            with st.spinner("🎨 AI විසින් රූපය නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15-30ක් පමණ රැඳී සිටින්න..."):
+                try:
+                    res = requests.get(img_url, timeout=60)
+                    if res.status_code == 200:
+                        st.image(res.content)
+                    else:
+                        st.error("⚠️ රූපය ලබා ගැනීමේ දෝෂයක්.")
+                except Exception as e:
+                    st.error("⚠️ රූපය Load වීමට වැඩි වෙලාවක් ගත විය. අන්තර්ජාල සම්බන්ධතාවය පරීක්ෂා කරන්න.")
+        else:
+            st.image(img_url)
         
     return clean_text
 
@@ -224,6 +235,20 @@ except ImportError:
     pass
 
 # =====================================================================================================
+# 🛠️ --- Error Handling Assistant (ස්වයංක්‍රීයව දෝෂ හඳුනාගෙන සිංහලෙන් පැහැදිලි කිරීම) --- 🛠️
+# =====================================================================================================
+def get_friendly_error_message(e):
+    error_str = str(e)
+    if "Name or service not known" in error_str or "Failed to establish a new connection" in error_str:
+        return "🌐 Supabase Project එක Pause වී ඇත. කරුණාකර Supabase Dashboard එකට ගොස් එය 'Restore' කරන්න."
+    elif "521" in error_str or "Web server is down" in error_str or "JSON could not be generated" in error_str:
+        return "⏳ Supabase සර්වර් එක මේ මොහොතේ Start වෙමින් පවතී. කරුණාකර විනාඩි 5ක් පමණ රැඳී සිට නැවත Refresh කරන්න."
+    elif "Row Level Security" in error_str or "RLS" in error_str:
+        return "🔒 ආරක්ෂිත සැකසුම් (RLS) නිසා දත්ත අවහිර වී ඇත. කරුණාකර Supabase හි RLS Policies පරීක්ෂා කරන්න."
+    else:
+        return f"තාක්ෂණික දෝෂයකි: {error_str[:120]}..."
+
+# =====================================================================================================
 # 🔐 --- දත්ත සමුදාය (Supabase Database Functions) --- 🔐
 # =====================================================================================================
 
@@ -232,7 +257,7 @@ def add_user(email, phone, password):
         supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
         return True
     except Exception as e:
-        st.error(f"⚠️ User එකතු කිරීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ User එකතු කිරීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return False
 
 def verify_user(email, password):
@@ -241,7 +266,7 @@ def verify_user(email, password):
         if res.data and res.data[0]["password"] == password:
             return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
     except Exception as e:
-        st.error(f"⚠️ User Verify දෝෂයක්: {e}")
+        st.error(f"⚠️ User Verify දෝෂයක්: {get_friendly_error_message(e)}")
     return None
 
 def find_user_by_email(email):
@@ -250,7 +275,7 @@ def find_user_by_email(email):
         if res.data:
             return (res.data[0]["email"], res.data[0]["phone"])
     except Exception as e:
-        st.error(f"⚠️ Email සෙවීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Email සෙවීමේ දෝෂයක්: {get_friendly_error_message(e)}")
     return None
 
 def get_all_users_for_admin():
@@ -258,7 +283,7 @@ def get_all_users_for_admin():
         res = supabase.table("users").select("id, email, phone, password, is_admin").execute()
         return [(r["id"], r["email"], r["phone"], r["password"], r["is_admin"]) for r in res.data]
     except Exception as e:
-        st.error(f"⚠️ Users ලබා ගැනීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Users ලබා ගැනීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return []
 
 def get_users_by_roles(roles):
@@ -266,7 +291,7 @@ def get_users_by_roles(roles):
         res = supabase.table("users").select("email").in_("is_admin", roles).execute()
         return [r["email"] for r in res.data]
     except Exception as e:
-        st.error(f"⚠️ Roles ලබා ගැනීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Roles ලබා ගැනීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return []
 
 def delete_user_by_id(user_id):
@@ -279,7 +304,7 @@ def delete_user_by_id(user_id):
             supabase.table("users").delete().eq("id", user_id).execute()
         return True
     except Exception as e:
-        st.error(f"⚠️ User මකා දැමීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ User මකා දැමීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return False
 
 def update_user_password(user_id, new_password):
@@ -288,7 +313,7 @@ def update_user_password(user_id, new_password):
         supabase.table("users").update({"password": new_password}).eq("id", user_id).execute()
         return True
     except Exception as e: 
-        st.error(f"⚠️ Password වෙනස් කිරීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Password වෙනස් කිරීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return False
 
 def update_user_role(user_id, role_int):
@@ -297,34 +322,34 @@ def update_user_role(user_id, role_int):
         supabase.table("users").update({"is_admin": role_int}).eq("id", user_id).execute()
         return True
     except Exception as e: 
-        st.error(f"⚠️ Role වෙනස් කිරීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Role වෙනස් කිරීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return False
 
 def update_user_api_key(email, api_key):
     try:
         supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
     except Exception as e: 
-        st.error(f"⚠️ API Key යාවත්කාලීන කිරීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ API Key යාවත්කාලීන කිරීමේ දෝෂයක්: {get_friendly_error_message(e)}")
 
 # --- Notifications (Supabase) ---
 def add_notification(target_email, message):
     try:
         supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
     except Exception as e: 
-        st.error(f"⚠️ Notification යැවීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Notification යැවීමේ දෝෂයක්: {get_friendly_error_message(e)}")
 
 def get_my_notifications(email):
     try:
         res = supabase.table("notifications").select("id, message").eq("email", email.lower()).order("id", desc=True).execute()
         return [(r["id"], r["message"]) for r in res.data]
     except Exception as e: 
-        st.error(f"⚠️ Notifications ලබා ගැනීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Notifications ලබා ගැනීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return []
 
 def delete_notification(notif_id):
     try: supabase.table("notifications").delete().eq("id", notif_id).execute()
     except Exception as e: 
-        st.error(f"⚠️ Notification මකා දැමීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Notification මකා දැමීමේ දෝෂයක්: {get_friendly_error_message(e)}")
 
 # --- Chat Memory (Supabase) ---
 def get_user_chats(email):
@@ -332,7 +357,7 @@ def get_user_chats(email):
         res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
         return res.data
     except Exception as e: 
-        st.error(f"⚠️ Chats ලබා ගැනීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Chats ලබා ගැනීමේ දෝෂයක්: {get_friendly_error_message(e)}")
         return []
 
 def load_chat(chat_id):
@@ -340,7 +365,7 @@ def load_chat(chat_id):
         res = supabase.table("chats").select("messages").eq("chat_id", chat_id).execute()
         if res.data: return res.data[0]["messages"]
     except Exception as e: 
-        st.error(f"⚠️ Chat Load වීමේ දෝෂයක්: {e}")
+        st.error(f"⚠️ Chat Load වීමේ දෝෂයක්: {get_friendly_error_message(e)}")
     return []
 
 def save_chat(email, chat_id, messages):
@@ -351,8 +376,7 @@ def save_chat(email, chat_id, messages):
         else:
             supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
     except Exception as e:
-        st.error(f"⚠️ චැට් එක Save වීමේ දෝෂයක්: {e}")
-        print("Chat save error:", e)
+        st.error(f"⚠️ චැට් එක Save වීමේ දෝෂයක්: {get_friendly_error_message(e)}")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -463,7 +487,7 @@ st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx.
 my_notifications = get_my_notifications(st.session_state.user_email)
 
 if my_notifications:
-    st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා জ্ঞ කරන්න.")
+    st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා කරන්න.")
 
 chat_records = get_user_chats(st.session_state.user_email)
 
@@ -704,10 +728,11 @@ with tab_chat:
         attachments = []
         
         if uploaded_file:
-            file_bytes = uploaded_file.getvalue()
-            b64_data = base64.b64encode(file_bytes).decode("utf-8")
-            attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
-            st.session_state.latest_img_url = upload_image(file_bytes, uploaded_file.name, uploaded_file.type)
+            with st.spinner("📤 රූපය සර්වර් එකට Upload වෙමින් පවතී..."):
+                file_bytes = uploaded_file.getvalue()
+                b64_data = base64.b64encode(file_bytes).decode("utf-8")
+                attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+                st.session_state.latest_img_url = upload_image(file_bytes, uploaded_file.name, uploaded_file.type)
         else:
             st.session_state.latest_img_url = ""
             
@@ -785,4 +810,3 @@ with tab_chat:
         
         if len(st.session_state.messages) == 2: 
             st.rerun()
-
