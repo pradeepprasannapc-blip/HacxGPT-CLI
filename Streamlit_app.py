@@ -1,0 +1,799 @@
+import streamlit as st
+import streamlit.components.v1 as components
+import os
+import requests
+import json
+import uuid
+import base64
+import re
+import time
+from supabase import create_client, Client
+
+# =====================================================================================================
+# 🧠 --- AI Brain/Engine කොටස (With Conversation Memory) --- 🧠
+# =====================================================================================================
+class MockDelta:
+    def __init__(self, content):
+        self.content = content
+
+class MockChoice:
+    def __init__(self, content):
+        self.delta = MockDelta(content)
+        self.message = MockDelta(content)
+
+class MockResponse:
+    def __init__(self, content):
+        self.choices = [MockChoice(content)]
+
+class NativeGeminiCompletions:
+    def __init__(self, api_key):
+        self.api_key = api_key
+
+    def create(self, model, messages, stream=False, temperature=0.75):
+        contents = []
+        system_text = ""
+        
+        # 🔥 පරණ මැසේජ් ඔක්කොම AI එකට මතක හිටින්න හරියටම Format කරන කොටස 🔥
+        for m in messages:
+            if m["role"] == "system":
+                system_text = m["content"]
+                continue
+            
+            role = "user" if m["role"] == "user" else "model"
+            parts = [{"text": m["content"]}]
+            
+            # පරණ ෆොටෝ/වොයිස් තිබ්බොත් ඒවත් AI එකට මතක් කරලා දෙනවා
+            if "attachments" in m:
+                for att in m["attachments"]:
+                    parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
+                    
+            contents.append({"role": role, "parts": parts})
+            
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
+        identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
+        
+        if system_text:
+            system_text = identity_prompt + "\n\n" + system_text
+        else:
+            system_text = identity_prompt
+        
+        payload = {"contents": contents}
+        if system_text:
+            payload["system_instruction"] = {"parts": [{"text": system_text}]}
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        
+        if res.status_code == 503:
+            raise Exception("Google සර්වර් මේ වෙලාවේ කාර්යබහුලයි (High Demand). තත්පර කිහිපයකින් නැවත උත්සාහ කරන්න.")
+        elif res.status_code != 200:
+            raise Exception(f"API Error {res.status_code}: {res.text}")
+        
+        try:
+            text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."
+            
+        return [MockResponse(text)] if stream else MockResponse(text)
+
+class NativeClient:
+    def __init__(self, api_key, **kwargs):
+        class Chat:
+            def __init__(self, key):
+                self.completions = NativeGeminiCompletions(key)
+        self.chat = Chat(api_key)
+
+# --- Streamlit UI Setup ---
+st.set_page_config(page_title="Pradeep Hacx AI", page_icon="👑", layout="centered", initial_sidebar_state="collapsed")
+
+# 🔥 Secrets Setup 🔥
+try:
+    ADMIN_EMAIL = st.secrets["ADMIN_EMAIL"]
+    ADMIN_PASSWORD = str(st.secrets["ADMIN_PASSWORD"])
+except KeyError:
+    ADMIN_EMAIL = "admin@hacx.lk"
+    ADMIN_PASSWORD = "1234"
+
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except KeyError:
+    st.error("⚠️ කරුණාකර Streamlit Cloud හි Supabase Secrets (SUPABASE_URL, SUPABASE_KEY) සකසන්න.")
+    st.stop()
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
+components.html(
+    """
+    <script>
+    setInterval(function() {
+        try {
+            var docs = [document, window.parent.document];
+            docs.forEach(function(doc) {
+                var badges = doc.querySelectorAll('a[href*="share.streamlit.io"], div[class*="viewerBadge"], [data-testid="manage-app-button"], [data-testid="stAppDeployButton"], .stDeployButton, #MainMenu, footer');
+                badges.forEach(function(badge) {
+                    badge.style.display = 'none';
+                    badge.style.visibility = 'hidden';
+                    badge.style.opacity = '0';
+                    badge.style.pointerEvents = 'none';
+                });
+            });
+        } catch(e) {} 
+    }, 200); 
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
+# --- 🔥 UI & CSS 🔥 ---
+st.markdown("""
+<style>
+header { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stToolbar"] { display: none !important; }
+footer { display: none !important; visibility: hidden !important; height: 0px !important; margin: 0px !important; padding: 0px !important; }
+.appview-container .main .block-container { padding-bottom: 2rem !important; }
+#st-deck-go-action-floating { display: none !important; }
+.stAppDeployButton, [data-testid="stAppDeployButton"], .stDeployButton { display: none !important; }
+.viewerBadge_container__1QSob, [data-testid="manage-app-button"] { display: none !important; }
+div[class*="viewerBadge_container"] { display: none !important; }
+.stChatMessage { overflow-x: hidden !important; }
+[data-testid="stChatMessageContent"] .stMarkdown p, 
+[data-testid="stChatMessageContent"] .stMarkdown li, 
+[data-testid="stChatMessageContent"] .stMarkdown span {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+[data-testid="stChatMessageContent"] .stMarkdown pre {
+    white-space: pre !important;
+    word-wrap: normal !important;
+    overflow-x: auto !important;
+    border-radius: 8px;
+}
+.hacx-title {
+    text-align: center;
+    background: linear-gradient(90deg, #ff4b4b, #ff904f, #ff4b4b);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 3.2em;
+    font-weight: 900;
+    margin-bottom: 0px;
+    padding-bottom: 0px;
+    animation: shine 3s linear infinite;
+}
+@keyframes shine { to { background-position: 200% center; } }
+.hacx-subtitle { text-align: center; color: #a0a0a0; font-size: 14px; margin-top: -5px; margin-bottom: 30px; }
+</style>
+""", unsafe_allow_html=True)
+
+try:
+    from hacxgpt.config import Config
+    from hacxgpt.core.brain import HacxBrain
+    from hacxgpt.utils.security import Security
+    import hacxgpt.core.brain as brain_module
+    from dotenv import set_key
+    Security.encrypt = lambda text: text
+    Security.decrypt = lambda text: text
+    brain_module.Client = NativeClient
+except ImportError:
+    pass
+
+# =====================================================================================================
+# 🔐 --- දත්ත සමුදාය (Supabase Database Functions) --- 🔐
+# =====================================================================================================
+
+def add_user(email, phone, password):
+    try:
+        supabase.table("users").insert({"email": email.lower(), "phone": phone, "password": password}).execute()
+        return True
+    except Exception:
+        return False
+
+def verify_user(email, password):
+    try:
+        res = supabase.table("users").select("email, password, is_admin, api_key").eq("email", email.lower()).execute()
+        if res.data and res.data[0]["password"] == password:
+            return {"email": res.data[0]["email"], "role_int": res.data[0]["is_admin"], "api_key": res.data[0].get("api_key", "")}
+    except Exception:
+        pass
+    return None
+
+def find_user_by_email(email):
+    try:
+        res = supabase.table("users").select("email, phone").eq("email", email.lower()).execute()
+        if res.data:
+            return (res.data[0]["email"], res.data[0]["phone"])
+    except Exception:
+        pass
+    return None
+
+def get_all_users_for_admin():
+    try:
+        res = supabase.table("users").select("id, email, phone, password, is_admin").execute()
+        return [(r["id"], r["email"], r["phone"], r["password"], r["is_admin"]) for r in res.data]
+    except Exception:
+        return []
+
+def get_users_by_roles(roles):
+    try:
+        res = supabase.table("users").select("email").in_("is_admin", roles).execute()
+        return [r["email"] for r in res.data]
+    except Exception:
+        return []
+
+def delete_user_by_id(user_id):
+    if st.session_state.user_role != 1: return False
+    try:
+        res = supabase.table("users").select("email").eq("id", user_id).execute()
+        if res.data:
+            user_email = res.data[0]["email"].lower()
+            supabase.table("chats").delete().eq("email", user_email).execute()
+            supabase.table("users").delete().eq("id", user_id).execute()
+        return True
+    except Exception:
+        return False
+
+def update_user_password(user_id, new_password):
+    if st.session_state.user_role == 0: return False
+    try:
+        supabase.table("users").update({"password": new_password}).eq("id", user_id).execute()
+        return True
+    except Exception: return False
+
+def update_user_role(user_id, role_int):
+    if st.session_state.user_role != 1: return False
+    try:
+        supabase.table("users").update({"is_admin": role_int}).eq("id", user_id).execute()
+        return True
+    except Exception: return False
+
+def update_user_api_key(email, api_key):
+    try:
+        supabase.table("users").update({"api_key": api_key}).eq("email", email.lower()).execute()
+    except Exception: pass
+
+# --- Notifications (Supabase) ---
+def add_notification(target_email, message):
+    try:
+        supabase.table("notifications").insert({"email": target_email.lower(), "message": message}).execute()
+    except Exception: pass
+
+def get_my_notifications(email):
+    try:
+        res = supabase.table("notifications").select("id, message").eq("email", email.lower()).order("id", desc=True).execute()
+        return [(r["id"], r["message"]) for r in res.data]
+    except Exception: return []
+
+def delete_notification(notif_id):
+    try: supabase.table("notifications").delete().eq("id", notif_id).execute()
+    except Exception: pass
+
+# --- Chat Memory (Supabase) ---
+def get_user_chats(email):
+    try:
+        res = supabase.table("chats").select("chat_id, messages, updated_at").eq("email", email.lower()).order("updated_at", desc=True).execute()
+        return res.data
+    except Exception: return []
+
+def load_chat(chat_id):
+    try:
+        res = supabase.table("chats").select("messages").eq("chat_id", chat_id).execute()
+        if res.data: return res.data[0]["messages"]
+    except Exception: pass
+    return []
+
+def save_chat(email, chat_id, messages):
+    try:
+        existing = supabase.table("chats").select("id").eq("chat_id", chat_id).execute()
+        if existing.data:
+            supabase.table("chats").update({"messages": messages, "updated_at": "now()"}).eq("chat_id", chat_id).execute()
+        else:
+            supabase.table("chats").insert({"email": email.lower(), "chat_id": chat_id, "messages": messages}).execute()
+    except Exception as e:
+        print("Chat save error:", e)
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.user_email = ""
+    st.session_state.user_role = 0 
+    st.session_state.saved_api_key = ""
+
+# =====================================================================================================
+# 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
+# =====================================================================================================
+
+if not st.session_state.logged_in:
+    st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='hacx-subtitle'>HacxGPT Secure Portal - ද්වාරය</p>", unsafe_allow_html=True)
+    
+    tab1, tab2, tab3 = st.tabs(["🔐 පිවිසෙන්න", "➕ ලියාපදිංචි වන්න", "❓ මුරපදය අමතක නම්"])
+
+    with tab1:
+        st.subheader("ඇප් එකට පිවිසෙන්න")
+        with st.form("login_form"):
+            login_email = st.text_input("Email ලිපිනය", placeholder="example@mail.com")
+            login_password = st.text_input("මුරපදය (Password)", type="password")
+            submitted = st.form_submit_button("ඇතුලත් වන්න", use_container_width=True)
+            
+            if submitted:
+                if login_email and login_password:
+                    if login_email.lower() == ADMIN_EMAIL.lower() and login_password == ADMIN_PASSWORD:
+                         st.session_state.logged_in = True
+                         st.session_state.user_email = login_email
+                         st.session_state.user_role = 1
+                         st.session_state.current_chat_id = str(uuid.uuid4())
+                         st.session_state.messages = []
+                         try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                         except KeyError: st.session_state.saved_api_key = ""
+                         st.rerun()
+                    
+                    user = verify_user(login_email, login_password)
+                    if user:
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = user["email"]
+                        st.session_state.user_role = user["role_int"]
+                        st.session_state.current_chat_id = str(uuid.uuid4())
+                        st.session_state.messages = []
+                        
+                        if user["api_key"]: st.session_state.saved_api_key = user["api_key"]
+                        else:
+                            try: st.session_state.saved_api_key = st.secrets["GEMINI_API_KEY"]
+                            except KeyError: st.session_state.saved_api_key = ""
+                                
+                        st.rerun()
+                    else:
+                        st.error("⚠️ ඔබගේ Email ලිපිනය හෝ මුරපදය වැරදියි.")
+                else:
+                    st.warning("⚠️ කරුණාකර සියලුම තොරතුරු ඇතුලත් කරන්න.")
+
+    with tab2:
+        st.subheader("අලුත් එකවුන්ට් එකක් සාදන්න")
+        with st.form("reg_form"):
+            reg_email = st.text_input("ඔබගේ Email ලිපිනය")
+            reg_phone = st.text_input("දුරකථන අංකය")
+            reg_password = st.text_input("නව මුරපදය (Password)", type="password")
+            confirm_password = st.text_input("මුරපදය නැවත ඇතුලත් කරන්න", type="password")
+            submitted_reg = st.form_submit_button("ලියාපදිංචි වන්න", use_container_width=True)
+            
+            if submitted_reg:
+                if reg_email and reg_phone and reg_password and confirm_password:
+                    if reg_password != confirm_password:
+                        st.error("⚠️ මුරපද දෙක නොගැලපේ.")
+                    elif "@" not in reg_email or "." not in reg_email:
+                        st.error("⚠️ වලංගු Email ලිපිනයක් ඇතුලත් කරන්න.")
+                    else:
+                        if add_user(reg_email, reg_phone, reg_password):
+                            st.success("✅ ලියාපදිංචි වීම සාර්ථකයි. දැන් පිවිසුම් ටැබ් එකට ගොස් ඇතුලත් වන්න.")
+                        else:
+                            st.error("⚠️ මෙම Email ලිපිනය දැනටමත් ලියාපදිංචි වී ඇත.")
+                else:
+                    st.warning("⚠️ කරුණාකර සියලුම විස්තර පුරවන්න.")
+
+    with tab3:
+        st.subheader("මුරපදය අමතක වී ඇත්නම්...")
+        st.info("කරුණාකර ඔබගේ ඊමේල් ලිපිනය ඇතුලත් කරන්න. අපි ඔබගේ ඉල්ලීම ඇඩ්මින් වෙත යොමු කරන්නෙමු.")
+        with st.form("forgot_form"):
+            check_email = st.text_input("ඔබ ලියාපදිංචි වූ Email ලිපිනය ඇතුලත් කරන්න")
+            submitted_check = st.form_submit_button("ඇඩ්මින්ට දැනුම් දෙන්න")
+            
+            if submitted_check:
+                user_info = find_user_by_email(check_email)
+                if user_info:
+                    st.success(f"ඔබගේ Phone අංකය: {user_info[1]}")
+                    admins = get_users_by_roles([1])
+                    for adm in admins:
+                        add_notification(adm, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    add_notification(ADMIN_EMAIL, f"🔑 මුරපදය අමතක වීම: පරිශීලකයා ({check_email} | {user_info[1]}) හට මුරපදය අමතක වී ඇත.")
+                    st.success("✅ ඇඩ්මින්වරුන් වෙත පණිවිඩයක් යවන ලදී!")
+                    st.toast("✅ පණිවිඩය යැව්වා!", icon="🚀")
+                else:
+                    st.error("⚠️ මෙම Email ලිපිනයෙන් පරිශීලකයෙකු හමු නොවීය.")
+
+    st.stop() 
+
+# =====================================================================================================
+# 🖥️ --- ඇප් එකේ ප්‍රධාන UI (Login වුණාට පසු) --- 🖥️
+# =====================================================================================================
+
+st.markdown("<h1 class='hacx-title'>👑 Pradeep Hacx AI</h1>", unsafe_allow_html=True)
+st.markdown("<p class='hacx-subtitle'>© 2026 Owned & Developed by Pradeep Hacx. All Rights Reserved.</p>", unsafe_allow_html=True)
+
+my_notifications = get_my_notifications(st.session_state.user_email)
+
+if my_notifications:
+    st.warning(f"🔔 **ඔබට කියවීමට අලුත් පණිවිඩ {len(my_notifications)} ක් ඇත!** කරුණාකර ඔබගේ පණිවිඩ ටැබ් එක පරීක්ෂා කරන්න.")
+
+chat_records = get_user_chats(st.session_state.user_email)
+
+is_admin_or_mod = st.session_state.user_role in [1, 2]
+
+if is_admin_or_mod:
+    tab_chat, tab_history, tab_settings, tab_admin = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "👨‍💻 ඇඩ්මින් පැනලය"])
+    tab_support = None
+else:
+    tab_chat, tab_history, tab_settings, tab_support = st.tabs(["💬 AI චැට්", "📝 ඉතිහාසය", "⚙️ සැකසුම්", "🎧 සහය සහ පණිවිඩ"])
+    tab_admin = None
+
+# --- 📝 CHAT HISTORY TAB ---
+with tab_history:
+    st.markdown("### 💬 Your Chats (ඔබගේ පැරණි කතා)")
+    if st.button("➕ අලුත් චැට් එකක් (New Chat)", use_container_width=True, type="primary"):
+        st.session_state.current_chat_id = str(uuid.uuid4())
+        st.session_state.messages = []
+        st.rerun()
+        
+    for record in chat_records:
+        chat_id = record["chat_id"]
+        msgs = record["messages"]
+        title = "Empty Chat"
+        for m in msgs:
+            if m["role"] == "user":
+                title = m["content"][:25] + "..." if len(m["content"]) > 25 else m["content"]
+                break
+        prefix = "👉 " if chat_id == st.session_state.current_chat_id else "📝 "
+        if st.button(f"{prefix}{title}", key=f"hist_{chat_id}", use_container_width=True):
+            st.session_state.current_chat_id = chat_id
+            st.session_state.messages = msgs
+            st.rerun()
+
+# --- ⚙️ SETTINGS TAB ---
+with tab_settings:
+    role_name = "User"
+    if st.session_state.user_role == 1: role_name = "Super Admin"
+    elif st.session_state.user_role == 2: role_name = "Moderator"
+    
+    st.markdown(f"### 👤 Welcome {st.session_state.user_email.split('@')[0]}! (`{role_name}`)")
+    st.divider()
+    st.header("🔑 API & Model Settings")
+    provider = st.selectbox("Select Provider", ["gemini", "openai", "groq"])
+    
+    input_api_key = st.text_input(f"Enter {provider.upper()} API Key", type="password", value=st.session_state.saved_api_key)
+
+    if provider == "gemini":
+        gemini_models = ["gemini-2.5-flash", "gemini-3.1-pro", "gemini-2.5-pro", "gemini-3.5-flash", "gemini-2.5-flash-8b"]
+        model = st.selectbox("Select Gemini Model", gemini_models)
+    else:
+        model = st.text_input("Model Name", value="gpt-3.5-turbo")
+        
+    if st.button("💾 සැකසුම් සුරකින්න (Save Settings)", use_container_width=True, type="primary"):
+        st.session_state.saved_api_key = input_api_key
+        update_user_api_key(st.session_state.user_email, input_api_key)
+        st.success("✅ සැකසුම් සාර්ථකව සුරැකුවා! දැන් '💬 AI චැට්' ටැබ් එකට ගොස් කතා කරන්න.")
+
+    st.divider()
+    if st.button("🚪 Logout (ඉවත් වන්න)", use_container_width=True, type="secondary"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.user_role = 0
+        st.session_state.messages = []
+        st.rerun()
+
+# --- 🎧 SUPPORT & INBOX TAB ---
+if tab_support is not None:
+    with tab_support:
+        st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
+        if not my_notifications:
+            st.info("ඔබට අලුත් පණිවිඩ නොමැත.")
+        else:
+            for n_id, n_msg in my_notifications:
+                with st.container(border=True):
+                    st.warning(n_msg)
+                    if st.button("✓ කියෙව්වා (Clear)", key=f"unotif_{n_id}"):
+                        delete_notification(n_id)
+                        st.rerun()
+        st.divider()
+        
+        st.markdown("### 🎧 ඇඩ්මින්ට පණිවිඩයක් යවන්න")
+        with st.form("support_form"):
+            user_message = st.text_area("ඔබගේ ගැටලුව හෝ පණිවිඩය මෙහි ලියන්න...", height=100)
+            if st.form_submit_button("පණිවිඩය යවන්න", use_container_width=True):
+                if user_message.strip():
+                    targets = get_users_by_roles([1, 2])
+                    if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
+                    
+                    for target in targets:
+                        add_notification(target, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
+                    st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
+                    st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
+                else:
+                    st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
+
+# --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
+if tab_admin is not None:
+    with tab_admin:
+        st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
+        if not my_notifications:
+            st.info("අලුත් පණිවිඩ නොමැත.")
+        else:
+            for n_id, n_msg in my_notifications:
+                with st.container(border=True):
+                    st.warning(n_msg)
+                    if st.button("✓ කියෙව්වා (Clear)", key=f"notif_{n_id}"):
+                        delete_notification(n_id)
+                        st.rerun()
+        st.divider()
+        
+        users = get_all_users_for_admin()
+        all_emails = [u[1] for u in users if u[1].lower() != ADMIN_EMAIL.lower()]
+        
+        st.markdown("### 📢 පණිවිඩ යවන්න (Send Message)")
+        with st.form("admin_msg_form"):
+            target_options = [
+                "All Users & Admins (හැමෝටම)", 
+                "Users ලට පමණක් (Users Only)", 
+                "Admins/Mods ලට පමණක් (Admins Only)"
+            ] + all_emails
+            
+            if st.session_state.user_role == 1 and st.session_state.user_email.lower() != ADMIN_EMAIL.lower():
+                 target_options.append(ADMIN_EMAIL)
+                 
+            target_audience = st.selectbox("කාටද යවන්නේ? (To)", target_options)
+            admin_msg = st.text_area("පණිවිඩය ලියන්න...", height=100)
+            
+            if st.form_submit_button("📤 පණිවිඩය යවන්න", use_container_width=True):
+                if not admin_msg.strip():
+                    st.warning("පණිවිඩයක් ලියන්න.")
+                else:
+                    targets = []
+                    if target_audience == "All Users & Admins (හැමෝටම)":
+                        targets = get_users_by_roles([0, 1, 2])
+                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
+                    elif target_audience == "Users ලට පමණක් (Users Only)":
+                        targets = get_users_by_roles([0])
+                    elif target_audience == "Admins/Mods ලට පමණක් (Admins Only)":
+                        targets = get_users_by_roles([1, 2])
+                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
+                    else:
+                        targets = [target_audience]
+                        
+                    sender_label = "Super Admin" if st.session_state.user_role == 1 else "Moderator"
+                    full_msg = f"📢 [{sender_label} පණිවිඩය: {st.session_state.user_email}]\n{admin_msg}"
+                    
+                    for t in targets:
+                        if t.lower() != st.session_state.user_email.lower():
+                            add_notification(t, full_msg)
+                        
+                    st.toast(f"✅ පණිවිඩය යැව්වා!", icon="🚀")
+                    st.success(f"✅ පණිවිඩය සාර්ථකව යවන ලදී!")
+
+        st.divider()
+        
+        st.markdown("### 👥 පරිශීලක කළමනාකරණය")
+        if not users:
+            st.info("පරිශීලකයින් හමු නොවීය.")
+        else:
+            for user_id, email, phone, password, role_int in users:
+                if email.lower() == ADMIN_EMAIL.lower() and st.session_state.user_email.lower() != ADMIN_EMAIL.lower(): 
+                    continue
+                
+                role_label = "User"
+                if role_int == 1: role_label = "Admin"
+                elif role_int == 2: role_label = "Moderator"
+                
+                with st.expander(f"👤 {email} ({role_label})"):
+                    st.write(f"**Phone Number:** {phone}")
+                    st.markdown("---")
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න", value=password, key=f"pass_{user_id}")
+                    with col2:
+                        st.write(""); st.write("")
+                        if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
+                            update_user_password(user_id, new_pass)
+                            st.toast("✅ මුරපදය වෙනස් කළා!", icon="💾")
+                    
+                    st.markdown("---")
+                    if st.session_state.user_role == 1:
+                        col_r1, col_r2 = st.columns([3, 1])
+                        with col_r1:
+                            role_opts = {"User": 0, "Moderator": 2, "Admin": 1}
+                            curr_role_name = list(role_opts.keys())[list(role_opts.values()).index(role_int)]
+                            new_role_name = st.selectbox("තනතුර (Role)", list(role_opts.keys()), index=list(role_opts.keys()).index(curr_role_name), key=f"role_{user_id}")
+                        with col_r2:
+                            st.write(""); st.write("")
+                            if st.button("💾 Role", key=f"rsave_{user_id}", use_container_width=True):
+                                update_user_role(user_id, role_opts[new_role_name])
+                                st.toast("✅ Role වෙනස් කළා!", icon="💾")
+                                st.rerun()
+                                
+                        if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
+                            if delete_user_by_id(user_id):
+                                st.rerun()
+                    else:
+                        st.info("තනතුරු වෙනස් කිරීම සහ මකා දැමීම Super Admin ට පමණක් සීමා වී ඇත.")
+
+# -----------------------------------------------------------------------------------------------------
+# 🤖 --- CHAT DISPLAY AND LOGIC ---
+# -----------------------------------------------------------------------------------------------------
+
+def sanitize_text(text):
+    text = re.sub(r'(?i)BlackTechX', 'Pradeep Hacx', text)
+    text = re.sub(r'(?i)HacxGPT', 'Pradeep Hacx AI', text)
+    text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
+    return text
+
+# 🔥 අලුත් AI Horde Image Generation Function එක (NSFW parameter එක සමග) 🔥
+def generate_image_aihorde(prompt_text, is_nsfw=False):
+    url = "https://aihorde.net/api/v2/generate/async"
+    headers = {"apikey": "0000000000"} 
+    payload = {
+        "prompt": prompt_text,
+        "params": {
+            "n": 1,
+            "width": 512,
+            "height": 512,
+            "steps": 25,
+        },
+        "nsfw": is_nsfw,
+        "censor_nsfw": not is_nsfw
+    }
+    
+    try:
+        res = requests.post(url, json=payload, headers=headers).json()
+        job_id = res.get("id")
+        if not job_id: return None
+
+        status_url = f"https://aihorde.net/api/v2/generate/status/{job_id}"
+        
+        while True:
+            time.sleep(3)
+            status_res = requests.get(status_url).json()
+            if status_res.get("done"):
+                generations = status_res.get("generations", [])
+                if generations:
+                    return generations[0].get("img")
+                break
+            if not status_res.get("is_possible"):
+                break
+    except Exception as e:
+        print("Image generation error:", e)
+    return None
+
+with tab_chat:
+    if "messages" not in st.session_state or len(st.session_state.messages) == 0:
+        st.session_state.messages = load_chat(st.session_state.current_chat_id)
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(sanitize_text(message["content"]))
+            if "attachments" in message:
+                for att in message["attachments"]:
+                    raw_bytes = base64.b64decode(att["data"])
+                    if att["type"].startswith("image/"): st.image(raw_bytes)
+                    elif att["type"].startswith("video/"): st.video(raw_bytes)
+                    elif att["type"].startswith("audio/"): st.audio(raw_bytes)
+
+    with st.popover("➕ පින්තූර / හඬ එකතු කරන්න", use_container_width=False):
+        uploaded_file = st.file_uploader("ගොනුවක් තෝරන්න (Image, Video)", type=["png", "jpg", "jpeg", "mp4"])
+        st.markdown("---")
+        voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
+
+    # 🔥 අලුතින් එකතු කළ Toggles දෙක 🔥
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        gen_image_toggle = st.toggle("🎨 ඡායාරූපයක් සාදන්න")
+    with col2:
+        nsfw_toggle = st.toggle("🔞 NSFW සක්‍රීය කරන්න", disabled=not gen_image_toggle)
+    
+    if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
+        attachments = []
+        
+        if uploaded_file:
+            file_bytes = uploaded_file.getvalue()
+            b64_data = base64.b64encode(file_bytes).decode("utf-8")
+            attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+            
+        if voice_file:
+            voice_bytes = voice_file.getvalue()
+            b64_data = base64.b64encode(voice_bytes).decode("utf-8")
+            attachments.append({"name": "Voice_Record.wav", "type": voice_file.type, "data": b64_data})
+            
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            if uploaded_file:
+                if uploaded_file.type.startswith("image/"): st.image(file_bytes)
+                elif uploaded_file.type.startswith("video/"): st.video(file_bytes)
+            if voice_file:
+                st.audio(voice_bytes)
+                
+        new_msg = {"role": "user", "content": prompt}
+        if attachments:
+            new_msg["attachments"] = attachments
+            
+        st.session_state.messages.append(new_msg)
+        save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+
+        if not st.session_state.saved_api_key:
+            st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
+            st.stop()
+
+        # 🔥 Image Mode ඔන් කරලා නම් ෆොටෝ එක හදනවා 🔥
+        if gen_image_toggle:
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                message_placeholder.markdown("🎨 *AI Horde හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (මෙයට විනාඩියක් පමණ ගත විය හැක)*")
+                
+                # nsfw_toggle එකේ status එක generate_image_aihorde එකට යවනවා
+                img_url = generate_image_aihorde(prompt.strip(), is_nsfw=nsfw_toggle)
+                
+                if img_url:
+                    try:
+                        img_bytes = requests.get(img_url).content
+                        b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                        full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
+                        
+                        message_placeholder.empty()
+                        st.markdown(full_response)
+                        st.image(img_bytes)
+                        
+                        model_msg = {
+                            "role": "model", 
+                            "content": full_response,
+                            "attachments": [{"name": "ai_horde_gen.webp", "type": "image/webp", "data": b64_img}]
+                        }
+                        st.session_state.messages.append(model_msg)
+                    except Exception as e:
+                        message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
+                        model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
+                        st.session_state.messages.append(model_msg)
+                else:
+                    message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Server කාර්යබහුල විය හැක.")
+                    model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය."}
+                    st.session_state.messages.append(model_msg)
+                    
+                save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+                st.rerun()
+
+        else:
+            # 🔥 Image Mode ඕෆ් කරලා නම් සාමාන්‍ය විදිහට චැට් කරනවා 🔥
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                try:
+                    clean_key = st.session_state.saved_api_key.strip()
+                    
+                    try:
+                        if not os.path.exists(Config.ENV_FILE):
+                             with open(Config.ENV_FILE, 'w') as f: f.write("")
+                        set_key(Config.ENV_FILE, f"{provider.upper()}_API_KEY", clean_key)
+                        Config.ACTIVE_PROVIDER = provider
+                        Config.ACTIVE_MODEL = model
+                        
+                        brain = HacxBrain(clean_key)
+                        brain.model = model 
+                        
+                        context_prompt = "Previous Conversation Context:\n"
+                        for m in st.session_state.messages[-6:-1]:  
+                            context_prompt += f"{m['role'].capitalize()}: {m['content']}\n"
+                        context_prompt += f"\nCurrent User Message: {prompt}\n\n[System Instruction: You must forcefully reply in Sinhala language only. කරුණාකර සැමවිටම සිංහල භාෂාවෙන් පමණක් පිළිතුරු දෙන්න.]"
+                        
+                        generator = brain.chat(context_prompt)
+                        for chunk in generator:
+                            full_response += chunk
+                            message_placeholder.markdown(sanitize_text(full_response) + "▌")
+                        message_placeholder.markdown(sanitize_text(full_response))
+
+                    except NameError:
+                        brain = NativeGeminiCompletions(clean_key)
+                        temp_messages = list(st.session_state.messages) 
+                        
+                        res = brain.create(model, temp_messages, stream=False)
+                        full_response = res.choices[0].delta.content
+                        message_placeholder.markdown(sanitize_text(full_response))
+                    
+                except Exception as e:
+                    st.error(f"❌ {e}")
+                    full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
+                    
+            st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
+            save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
+            
+            if len(st.session_state.messages) == 2: 
+                st.rerun()
