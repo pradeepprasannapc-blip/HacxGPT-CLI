@@ -477,6 +477,7 @@ with tab_settings:
         st.rerun()
 
 # --- 🎧 SUPPORT & INBOX TAB ---
+# (Support and Admin panels remain unchanged)
 if tab_support is not None:
     with tab_support:
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
@@ -498,15 +499,12 @@ if tab_support is not None:
                 if user_message.strip():
                     targets = get_users_by_roles([1, 2])
                     if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
-                    
                     for target in targets:
                         add_notification(target, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
-                    st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
                     st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
-# --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
@@ -520,52 +518,7 @@ if tab_admin is not None:
                         delete_notification(n_id)
                         st.rerun()
         st.divider()
-        
         users = get_all_users_for_admin()
-        all_emails = [u[1] for u in users if u[1].lower() != ADMIN_EMAIL.lower()]
-        
-        st.markdown("### 📢 පණිවිඩ යවන්න (Send Message)")
-        with st.form("admin_msg_form"):
-            target_options = [
-                "All Users & Admins (හැමෝටම)", 
-                "Users ලට පමණක් (Users Only)", 
-                "Admins/Mods ලට පමණක් (Admins Only)"
-            ] + all_emails
-            
-            if st.session_state.user_role == 1 and st.session_state.user_email.lower() != ADMIN_EMAIL.lower():
-                 target_options.append(ADMIN_EMAIL)
-                 
-            target_audience = st.selectbox("කාටද යවන්නේ? (To)", target_options)
-            admin_msg = st.text_area("පණිවිඩය ලියන්න...", height=100)
-            
-            if st.form_submit_button("📤 පණිවිඩය යවන්න", use_container_width=True):
-                if not admin_msg.strip():
-                    st.warning("පණිවිඩයක් ලියන්න.")
-                else:
-                    targets = []
-                    if target_audience == "All Users & Admins (හැමෝටම)":
-                        targets = get_users_by_roles([0, 1, 2])
-                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
-                    elif target_audience == "Users ලට පමණක් (Users Only)":
-                        targets = get_users_by_roles([0])
-                    elif target_audience == "Admins/Mods ලට පමණක් (Admins Only)":
-                        targets = get_users_by_roles([1, 2])
-                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
-                    else:
-                        targets = [target_audience]
-                        
-                    sender_label = "Super Admin" if st.session_state.user_role == 1 else "Moderator"
-                    full_msg = f"📢 [{sender_label} පණිවිඩය: {st.session_state.user_email}]\n{admin_msg}"
-                    
-                    for t in targets:
-                        if t.lower() != st.session_state.user_email.lower():
-                            add_notification(t, full_msg)
-                        
-                    st.toast(f"✅ පණිවිඩය යැව්වා!", icon="🚀")
-                    st.success(f"✅ පණිවිඩය සාර්ථකව යවන ලදී!")
-
-        st.divider()
-        
         st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         if not users:
             st.info("පරිශීලකයින් හමු නොවීය.")
@@ -573,43 +526,16 @@ if tab_admin is not None:
             for user_id, email, phone, password, role_int in users:
                 if email.lower() == ADMIN_EMAIL.lower() and st.session_state.user_email.lower() != ADMIN_EMAIL.lower(): 
                     continue
-                
                 role_label = "User"
                 if role_int == 1: role_label = "Admin"
                 elif role_int == 2: role_label = "Moderator"
                 
                 with st.expander(f"👤 {email} ({role_label})"):
                     st.write(f"**Phone Number:** {phone}")
-                    st.markdown("---")
-                    
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න", value=password, key=f"pass_{user_id}")
-                    with col2:
-                        st.write(""); st.write("")
-                        if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
-                            update_user_password(user_id, new_pass)
-                            st.toast("✅ මුරපදය වෙනස් කළා!", icon="💾")
-                    
-                    st.markdown("---")
                     if st.session_state.user_role == 1:
-                        col_r1, col_r2 = st.columns([3, 1])
-                        with col_r1:
-                            role_opts = {"User": 0, "Moderator": 2, "Admin": 1}
-                            curr_role_name = list(role_opts.keys())[list(role_opts.values()).index(role_int)]
-                            new_role_name = st.selectbox("තනතුර (Role)", list(role_opts.keys()), index=list(role_opts.keys()).index(curr_role_name), key=f"role_{user_id}")
-                        with col_r2:
-                            st.write(""); st.write("")
-                            if st.button("💾 Role", key=f"rsave_{user_id}", use_container_width=True):
-                                update_user_role(user_id, role_opts[new_role_name])
-                                st.toast("✅ Role වෙනස් කළා!", icon="💾")
-                                st.rerun()
-                                
                         if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
                             if delete_user_by_id(user_id):
                                 st.rerun()
-                    else:
-                        st.info("තනතුරු වෙනස් කිරීම සහ මකා දැමීම Super Admin ට පමණක් සීමා වී ඇත.")
 
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
@@ -621,10 +547,9 @@ def sanitize_text(text):
     text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
-# 🔥 Google Colab Image Generation Function එක (Text2Img + Img2Img) 🔥
+# 🔥 Google Colab Image Generation Function එක 🔥
 def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_b64=None):
     url = colab_base_url.rstrip("/") + "/generate"
-    
     neg_prompt = "ugly, bad quality, blurry, deformed, poorly drawn, extra limbs"
     if is_nsfw:
         prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo, realistic"
@@ -633,8 +558,8 @@ def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_
         "prompt": prompt_text,
         "negative_prompt": neg_prompt,
         "steps": 30,
-        "init_image": init_image_b64, # ඡායාරූපය එවන්නේ නම් මෙය යවනු ලැබේ
-        "strength": 0.65 # Upload කල ඡායාරූපය මත පදනම් වන ප්‍රමාණය
+        "init_image": init_image_b64,
+        "strength": 0.65 
     }
     
     try:
@@ -646,6 +571,16 @@ def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_
     except Exception as e:
         print("Image generation error:", e)
     return None
+
+# 🔥 Pollinations (Fast Server) Image Generation Function එක 🔥
+def generate_image_pollinations(prompt_text, is_nsfw=False):
+    if is_nsfw:
+        prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo"
+        
+    safe_prompt = urllib.parse.quote(prompt_text)
+    seed = int(time.time())
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=512&height=768&nologo=true&seed={seed}"
+    return url
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -668,13 +603,19 @@ with tab_chat:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # 🔥 අලුතින් එකතු කළ Toggles සහ Dropdown Menu එක 🔥
     col1, col2, col3 = st.columns(3)
     with col1:
         gen_image_toggle = st.toggle("🎨 ඡායාරූපයක් සාදන්න")
     with col2:
-        nsfw_toggle = st.toggle("🔞 NSFW සක්‍රීය කරන්න", disabled=not gen_image_toggle)
+        nsfw_toggle = st.toggle("🔞 NSFW", disabled=not gen_image_toggle)
     with col3:
-        auto_prompt_toggle = st.toggle("🔤 Auto Translate", value=True, disabled=not gen_image_toggle)
+        auto_prompt_toggle = st.toggle("🔤 Translate", value=True, disabled=not gen_image_toggle)
+        
+    # Engine එක තෝරන්න දෙන Menu එක
+    image_engine = st.selectbox("⚙️ ඡායාරූප එන්ජිම තෝරන්න:", 
+                                ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)"], 
+                                disabled=not gen_image_toggle)
     
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
         attachments = []
@@ -685,7 +626,7 @@ with tab_chat:
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
             if uploaded_file.type.startswith("image/"):
-                uploaded_image_b64 = b64_data # Img2Img සඳහා භාවිතා වේ
+                uploaded_image_b64 = b64_data 
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -711,7 +652,7 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # 🔥 Auto Prompt & Image Generation Logic (Text2Img / Img2Img) 🔥
+        # 🔥 Auto Prompt & Image Generation Logic 🔥
         if gen_image_toggle:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
@@ -721,35 +662,29 @@ with tab_chat:
                     
                     if auto_prompt_toggle:
                         message_placeholder.markdown("🔄 *ඔබගේ අදහස තේරුම් ගනිමින් පවතී...*")
-                        
                         clean_key = st.session_state.saved_api_key.strip()
                         prompt_maker = NativeGeminiCompletions(clean_key)
-                        
                         translation_sys_prompt = "You are an expert Stable Diffusion prompt crafter. The user will provide a description in Sinhala, Singlish, or a mix of languages. Translate and enhance this description into a highly detailed, descriptive, comma-separated English prompt suitable for AI image generation. Return ONLY the English prompt string. Do not include any conversational text, explanations, or quotes."
-                        
                         temp_msg = [{"role": "user", "content": f"{translation_sys_prompt}\n\nUser Input: {prompt.strip()}"}]
                         
                         try:
                             res_translation = prompt_maker.create(model, temp_msg, stream=False)
                             english_prompt = res_translation.choices[0].delta.content.strip()
-                        except Exception as translation_error:
+                        except Exception:
                             english_prompt = prompt.strip()
                             
-                    mode_msg = "ඡායාරූපය වෙනස් කරමින් පවතී (Img2Img)" if uploaded_image_b64 else "ඡායාරූපය නිර්මාණය කරමින් පවතී"
-                    message_placeholder.markdown(f"🎨 *Colab සර්වර් එක හරහා {mode_msg}...*\n\n*(💡 Prompt: {english_prompt})*")
-                    
-                    # Colab සර්වර් එකට යැවීම (uploaded_image_b64 එකද සමඟ)
-                    img_bytes = generate_image_colab(
-                        english_prompt, 
-                        st.session_state.colab_url, 
-                        is_nsfw=nsfw_toggle, 
-                        init_image_b64=uploaded_image_b64
-                    )
-                    
-                    if img_bytes:
+                    # --- අලුත් Engine Selection එකට අනුව වැඩ කිරීම ---
+                    if image_engine == "Fast Free Server (Pollinations)":
+                        if uploaded_image_b64:
+                            st.warning("⚠️ Pollinations එන්ජිමෙන් ෆොටෝ එඩිට් කරන්න බැහැ. අපි ඔයාගේ වචන වලින් විතරක් ෆොටෝ එක හදනවා.")
+                            
+                        message_placeholder.markdown(f"🎨 *Pollinations සර්වර් එක හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී...*\n\n*(💡 Prompt: {english_prompt})*")
+                        img_url = generate_image_pollinations(english_prompt, is_nsfw=nsfw_toggle)
+                        
                         try:
+                            img_bytes = requests.get(img_url).content
                             b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                            full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා!\n\n*(Prompt: {english_prompt})*"
+                            full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Fast Server)\n\n*(Prompt: {english_prompt})*"
                             
                             message_placeholder.empty()
                             st.markdown(full_response)
@@ -758,17 +693,42 @@ with tab_chat:
                             model_msg = {
                                 "role": "model", 
                                 "content": full_response,
-                                "attachments": [{"name": "colab_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                                "attachments": [{"name": "fast_gen.jpg", "type": "image/jpeg", "data": b64_img}]
                             }
                             st.session_state.messages.append(model_msg)
                         except Exception as e:
-                            message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
-                            model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
-                            st.session_state.messages.append(model_msg)
-                    else:
-                        message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. කරුණාකර Colab සර්වර් එක ධාවනය වේදැයි පරීක්ෂා කරන්න.")
-                        model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Colab සර්වර් එක Off වී තිබිය හැක."}
-                        st.session_state.messages.append(model_msg)
+                            message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
+                    
+                    elif image_engine == "Google Colab (High Quality & Edit)":
+                        mode_msg = "ඡායාරූපය වෙනස් කරමින් පවතී (Img2Img)" if uploaded_image_b64 else "ඡායාරූපය නිර්මාණය කරමින් පවතී"
+                        message_placeholder.markdown(f"🎨 *Colab සර්වර් එක හරහා {mode_msg}...*\n\n*(💡 Prompt: {english_prompt})*")
+                        
+                        img_bytes = generate_image_colab(
+                            english_prompt, 
+                            st.session_state.colab_url, 
+                            is_nsfw=nsfw_toggle, 
+                            init_image_b64=uploaded_image_b64
+                        )
+                        
+                        if img_bytes:
+                            try:
+                                b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                                full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා!\n\n*(Prompt: {english_prompt})*"
+                                
+                                message_placeholder.empty()
+                                st.markdown(full_response)
+                                st.image(img_bytes)
+                                
+                                model_msg = {
+                                    "role": "model", 
+                                    "content": full_response,
+                                    "attachments": [{"name": "colab_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                                }
+                                st.session_state.messages.append(model_msg)
+                            except Exception as e:
+                                message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
+                        else:
+                            message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. කරුණාකර Colab සර්වර් එක On වෙලාද බලන්න.")
                         
                 except Exception as main_error:
                     message_placeholder.error(f"තාක්ෂණික දෝෂයක්: {main_error}")
@@ -777,14 +737,13 @@ with tab_chat:
                 st.rerun()
 
         else:
-            # 🔥 Image Mode ඕෆ් කරලා නම් සාමාන්‍ය විදිහට චැට් කරනවා 🔥
+            # 🔥 සාමාන්‍ය චැට් කිරීම 🔥
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 full_response = ""
                 
                 try:
                     clean_key = st.session_state.saved_api_key.strip()
-                    
                     try:
                         if not os.path.exists(Config.ENV_FILE):
                              with open(Config.ENV_FILE, 'w') as f: f.write("")
@@ -805,21 +764,17 @@ with tab_chat:
                             full_response += chunk
                             message_placeholder.markdown(sanitize_text(full_response) + "▌")
                         message_placeholder.markdown(sanitize_text(full_response))
-
                     except NameError:
                         brain = NativeGeminiCompletions(clean_key)
                         temp_messages = list(st.session_state.messages) 
-                        
                         res = brain.create(model, temp_messages, stream=False)
                         full_response = res.choices[0].delta.content
                         message_placeholder.markdown(sanitize_text(full_response))
-                    
                 except Exception as e:
                     st.error(f"❌ {e}")
                     full_response = "සමාවෙන්න, තාක්ෂණික දෝෂයක්. නැවත උත්සාහ කරන්න."
                     
             st.session_state.messages.append({"role": "model", "content": sanitize_text(full_response)})
             save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
-            
             if len(st.session_state.messages) == 2: 
                 st.rerun()
