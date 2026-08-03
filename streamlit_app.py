@@ -301,6 +301,7 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
+    st.session_state.colab_url = "https://reviving-language-uplifting.ngrok-free.dev" # 🔥 ඔයාගේ අලුත් ලින්ක් එක 🔥
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -459,8 +460,13 @@ with tab_settings:
     else:
         model = st.text_input("Model Name", value="gpt-3.5-turbo")
         
+    st.divider()
+    st.header("🎨 AI Image Server Settings (Google Colab)")
+    input_colab_url = st.text_input("Colab API URL (Ngrok Link)", value=st.session_state.colab_url, help="Google Colab එකෙන් ලැබෙන අලුත් Ngrok ලින්ක් එක මෙතැනට ඇතුලත් කරන්න.")
+        
     if st.button("💾 සැකසුම් සුරකින්න (Save Settings)", use_container_width=True, type="primary"):
         st.session_state.saved_api_key = input_api_key
+        st.session_state.colab_url = input_colab_url
         update_user_api_key(st.session_state.user_email, input_api_key)
         st.success("✅ සැකසුම් සාර්ථකව සුරැකුවා! දැන් '💬 AI චැට්' ටැබ් එකට ගොස් කතා කරන්න.")
 
@@ -617,17 +623,31 @@ def sanitize_text(text):
     text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
-# 🔥 අලුත් Pollinations.ai Image Generation Function එක (ඉතා වේගවත්) 🔥
-def generate_image_pollinations(prompt_text, is_nsfw=False):
-    # nsfw toggle එක on නම්, prompt එකට පොඩි keywords ටිකක් එකතු කරනවා
-    if is_nsfw:
-        prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo"
-        
-    safe_prompt = urllib.parse.quote(prompt_text)
-    seed = int(time.time()) # හැමවෙලේම අලුත් ෆොටෝ එකක් එන්න random seed එකක් දානවා
-    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=512&height=768&nologo=true&seed={seed}"
+# 🔥 Google Colab Image Generation Function එක 🔥
+def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False):
+    # Colab API URL එක හරියටම ෆෝමැට් කරනවා
+    url = colab_base_url.rstrip("/") + "/generate"
     
-    return url
+    # NSFW On නම් ඒකට අදාල ටැග් ටිකතු කරනවා, නැත්නම් සාමාන්‍ය විදිහට.
+    neg_prompt = "ugly, bad quality, blurry, deformed, poorly drawn, extra limbs"
+    if is_nsfw:
+        prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo, realistic"
+        
+    payload = {
+        "prompt": prompt_text,
+        "negative_prompt": neg_prompt,
+        "steps": 30
+    }
+    
+    try:
+        res = requests.post(url, json=payload, timeout=120)
+        if res.status_code == 200:
+            return res.content
+        else:
+            print("Server Error:", res.text)
+    except Exception as e:
+        print("Image generation error:", e)
+    return None
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -648,7 +668,7 @@ with tab_chat:
         st.markdown("---")
         voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
 
-    # 🔥 අලුතින් එකතු කළ Toggles දෙක 🔥
+    # 🔥 අලුතින් එකතු කළ Toggles දෙක (Image Mode & NSFW) 🔥
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
@@ -688,33 +708,37 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # 🔥 Image Mode ඔන් කරලා නම් ෆොටෝ එක හදනවා (Pollinations හරහා) 🔥
+        # 🔥 Image Mode ඔන් කරලා නම් ඔයාගේ Colab සර්වර් එකෙන් ෆොටෝ එක හදනවා 🔥
         if gen_image_toggle:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                message_placeholder.markdown("🎨 *ඡායාරූපය නිර්මාණය කරමින් පවතී... (තත්පර කිහිපයක් රැඳී සිටින්න)*")
+                message_placeholder.markdown("🎨 *ඔබගේ Colab සර්වර් එක හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (කරුණාකර රැඳී සිටින්න)*")
                 
-                # Pollinations URL එක ගන්නවා
-                img_url = generate_image_pollinations(prompt.strip(), is_nsfw=nsfw_toggle)
+                # Colab එකට Request එක යවනවා
+                img_bytes = generate_image_colab(prompt.strip(), st.session_state.colab_url, is_nsfw=nsfw_toggle)
                 
-                try:
-                    img_bytes = requests.get(img_url).content
-                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                    full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
-                    
-                    message_placeholder.empty()
-                    st.markdown(full_response)
-                    st.image(img_bytes)
-                    
-                    model_msg = {
-                        "role": "model", 
-                        "content": full_response,
-                        "attachments": [{"name": "ai_gen.jpg", "type": "image/jpeg", "data": b64_img}]
-                    }
-                    st.session_state.messages.append(model_msg)
-                except Exception as e:
-                    message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
-                    model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
+                if img_bytes:
+                    try:
+                        b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                        full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය Colab සර්වර් එකෙන් සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
+                        
+                        message_placeholder.empty()
+                        st.markdown(full_response)
+                        st.image(img_bytes)
+                        
+                        model_msg = {
+                            "role": "model", 
+                            "content": full_response,
+                            "attachments": [{"name": "colab_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                        }
+                        st.session_state.messages.append(model_msg)
+                    except Exception as e:
+                        message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
+                        model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
+                        st.session_state.messages.append(model_msg)
+                else:
+                    message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. කරුණාකර Colab සර්වර් එක ධාවනය වේදැයි පරීක්ෂා කරන්න.")
+                    model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Colab සර්වර් එක Off වී තිබිය හැක."}
                     st.session_state.messages.append(model_msg)
                     
                 save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
