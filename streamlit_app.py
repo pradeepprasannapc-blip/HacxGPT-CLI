@@ -621,8 +621,8 @@ def sanitize_text(text):
     text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
-# 🔥 Google Colab Image Generation Function එක 🔥
-def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False):
+# 🔥 Google Colab Image Generation Function එක (Text2Img + Img2Img) 🔥
+def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_b64=None):
     url = colab_base_url.rstrip("/") + "/generate"
     
     neg_prompt = "ugly, bad quality, blurry, deformed, poorly drawn, extra limbs"
@@ -632,7 +632,9 @@ def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False):
     payload = {
         "prompt": prompt_text,
         "negative_prompt": neg_prompt,
-        "steps": 30
+        "steps": 30,
+        "init_image": init_image_b64, # ඡායාරූපය එවන්නේ නම් මෙය යවනු ලැබේ
+        "strength": 0.65 # Upload කල ඡායාරූපය මත පදනම් වන ප්‍රමාණය
     }
     
     try:
@@ -666,7 +668,6 @@ with tab_chat:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🔥 අලුතින් එකතු කළ Auto Translate Toggle එක 🔥
     col1, col2, col3 = st.columns(3)
     with col1:
         gen_image_toggle = st.toggle("🎨 ඡායාරූපයක් සාදන්න")
@@ -677,11 +678,14 @@ with tab_chat:
     
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
         attachments = []
+        uploaded_image_b64 = None
         
         if uploaded_file:
             file_bytes = uploaded_file.getvalue()
             b64_data = base64.b64encode(file_bytes).decode("utf-8")
             attachments.append({"name": uploaded_file.name, "type": uploaded_file.type, "data": b64_data})
+            if uploaded_file.type.startswith("image/"):
+                uploaded_image_b64 = b64_data # Img2Img සඳහා භාවිතා වේ
             
         if voice_file:
             voice_bytes = voice_file.getvalue()
@@ -707,18 +711,17 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # 🔥 Auto Prompt & Image Generation Logic 🔥
+        # 🔥 Auto Prompt & Image Generation Logic (Text2Img / Img2Img) 🔥
         if gen_image_toggle:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 
                 try:
-                    english_prompt = prompt.strip() # Default: User's exact input
+                    english_prompt = prompt.strip()
                     
                     if auto_prompt_toggle:
                         message_placeholder.markdown("🔄 *ඔබගේ අදහස තේරුම් ගනිමින් පවතී...*")
                         
-                        # 1. සිංහල අදහස ඉංග්‍රීසි Prompt එකකට හැරවීම (Gemini හරහා)
                         clean_key = st.session_state.saved_api_key.strip()
                         prompt_maker = NativeGeminiCompletions(clean_key)
                         
@@ -730,12 +733,18 @@ with tab_chat:
                             res_translation = prompt_maker.create(model, temp_msg, stream=False)
                             english_prompt = res_translation.choices[0].delta.content.strip()
                         except Exception as translation_error:
-                            english_prompt = prompt.strip() # පරිවර්තනය අසාර්ථක වුවහොත් මුල් Prompt එකම යවයි.
+                            english_prompt = prompt.strip()
                             
-                    message_placeholder.markdown(f"🎨 *Colab සර්වර් එක හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී...*\n\n*(💡 Prompt: {english_prompt})*")
+                    mode_msg = "ඡායාරූපය වෙනස් කරමින් පවතී (Img2Img)" if uploaded_image_b64 else "ඡායාරූපය නිර්මාණය කරමින් පවතී"
+                    message_placeholder.markdown(f"🎨 *Colab සර්වර් එක හරහා {mode_msg}...*\n\n*(💡 Prompt: {english_prompt})*")
                     
-                    # 2. අලුත් ඉංග්‍රීසි Prompt එක Colab සර්වර් එකට යැවීම
-                    img_bytes = generate_image_colab(english_prompt, st.session_state.colab_url, is_nsfw=nsfw_toggle)
+                    # Colab සර්වර් එකට යැවීම (uploaded_image_b64 එකද සමඟ)
+                    img_bytes = generate_image_colab(
+                        english_prompt, 
+                        st.session_state.colab_url, 
+                        is_nsfw=nsfw_toggle, 
+                        init_image_b64=uploaded_image_b64
+                    )
                     
                     if img_bytes:
                         try:
