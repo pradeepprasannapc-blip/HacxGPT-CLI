@@ -477,7 +477,6 @@ with tab_settings:
         st.rerun()
 
 # --- 🎧 SUPPORT & INBOX TAB ---
-# (Support and Admin panels remain unchanged)
 if tab_support is not None:
     with tab_support:
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
@@ -501,10 +500,12 @@ if tab_support is not None:
                     if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
                     for target in targets:
                         add_notification(target, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
+                    st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
                     st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
 
+# --- 👨‍💻 ADMIN & MODERATOR PANEL TAB ---
 if tab_admin is not None:
     with tab_admin:
         st.markdown("### 🔔 ලැබුණු පණිවිඩ (Inbox)")
@@ -518,7 +519,52 @@ if tab_admin is not None:
                         delete_notification(n_id)
                         st.rerun()
         st.divider()
+        
         users = get_all_users_for_admin()
+        all_emails = [u[1] for u in users if u[1].lower() != ADMIN_EMAIL.lower()]
+        
+        st.markdown("### 📢 පණිවිඩ යවන්න (Send Message)")
+        with st.form("admin_msg_form"):
+            target_options = [
+                "All Users & Admins (හැමෝටම)", 
+                "Users ලට පමණක් (Users Only)", 
+                "Admins/Mods ලට පමණක් (Admins Only)"
+            ] + all_emails
+            
+            if st.session_state.user_role == 1 and st.session_state.user_email.lower() != ADMIN_EMAIL.lower():
+                 target_options.append(ADMIN_EMAIL)
+                 
+            target_audience = st.selectbox("කාටද යවන්නේ? (To)", target_options)
+            admin_msg = st.text_area("පණිවිඩය ලියන්න...", height=100)
+            
+            if st.form_submit_button("📤 පණිවිඩය යවන්න", use_container_width=True):
+                if not admin_msg.strip():
+                    st.warning("පණිවිඩයක් ලියන්න.")
+                else:
+                    targets = []
+                    if target_audience == "All Users & Admins (හැමෝටම)":
+                        targets = get_users_by_roles([0, 1, 2])
+                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
+                    elif target_audience == "Users ලට පමණක් (Users Only)":
+                        targets = get_users_by_roles([0])
+                    elif target_audience == "Admins/Mods ලට පමණක් (Admins Only)":
+                        targets = get_users_by_roles([1, 2])
+                        if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
+                    else:
+                        targets = [target_audience]
+                        
+                    sender_label = "Super Admin" if st.session_state.user_role == 1 else "Moderator"
+                    full_msg = f"📢 [{sender_label} පණිවිඩය: {st.session_state.user_email}]\n{admin_msg}"
+                    
+                    for t in targets:
+                        if t.lower() != st.session_state.user_email.lower():
+                            add_notification(t, full_msg)
+                        
+                    st.toast(f"✅ පණිවිඩය යැව්වා!", icon="🚀")
+                    st.success(f"✅ පණිවිඩය සාර්ථකව යවන ලදී!")
+
+        st.divider()
+        
         st.markdown("### 👥 පරිශීලක කළමනාකරණය")
         if not users:
             st.info("පරිශීලකයින් හමු නොවීය.")
@@ -526,16 +572,43 @@ if tab_admin is not None:
             for user_id, email, phone, password, role_int in users:
                 if email.lower() == ADMIN_EMAIL.lower() and st.session_state.user_email.lower() != ADMIN_EMAIL.lower(): 
                     continue
+                
                 role_label = "User"
                 if role_int == 1: role_label = "Admin"
                 elif role_int == 2: role_label = "Moderator"
                 
                 with st.expander(f"👤 {email} ({role_label})"):
                     st.write(f"**Phone Number:** {phone}")
+                    st.markdown("---")
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        new_pass = st.text_input("මුරපදය වෙනස් කරන්න", value=password, key=f"pass_{user_id}")
+                    with col2:
+                        st.write(""); st.write("")
+                        if st.button("💾 Save", key=f"save_{user_id}", use_container_width=True):
+                            update_user_password(user_id, new_pass)
+                            st.toast("✅ මුරපදය වෙනස් කළා!", icon="💾")
+                    
+                    st.markdown("---")
                     if st.session_state.user_role == 1:
+                        col_r1, col_r2 = st.columns([3, 1])
+                        with col_r1:
+                            role_opts = {"User": 0, "Moderator": 2, "Admin": 1}
+                            curr_role_name = list(role_opts.keys())[list(role_opts.values()).index(role_int)]
+                            new_role_name = st.selectbox("තනතුර (Role)", list(role_opts.keys()), index=list(role_opts.keys()).index(curr_role_name), key=f"role_{user_id}")
+                        with col_r2:
+                            st.write(""); st.write("")
+                            if st.button("💾 Role", key=f"rsave_{user_id}", use_container_width=True):
+                                update_user_role(user_id, role_opts[new_role_name])
+                                st.toast("✅ Role වෙනස් කළා!", icon="💾")
+                                st.rerun()
+                                
                         if st.button("🗑️ Delete User (පරිශීලකයා මකන්න)", key=f"del_{user_id}", type="primary"):
                             if delete_user_by_id(user_id):
                                 st.rerun()
+                    else:
+                        st.info("තනතුරු වෙනස් කිරීම සහ මකා දැමීම Super Admin ට පමණක් සීමා වී ඇත.")
 
 # -----------------------------------------------------------------------------------------------------
 # 🤖 --- CHAT DISPLAY AND LOGIC ---
@@ -612,7 +685,6 @@ with tab_chat:
     with col3:
         auto_prompt_toggle = st.toggle("🔤 Translate", value=True, disabled=not gen_image_toggle)
         
-    # Engine එක තෝරන්න දෙන Menu එක
     image_engine = st.selectbox("⚙️ ඡායාරූප එන්ජිම තෝරන්න:", 
                                 ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)"], 
                                 disabled=not gen_image_toggle)
@@ -673,7 +745,7 @@ with tab_chat:
                         except Exception:
                             english_prompt = prompt.strip()
                             
-                    # --- අලුත් Engine Selection එකට අනුව වැඩ කිරීම ---
+                    # --- Engine Selection එකට අනුව වැඩ කිරීම ---
                     if image_engine == "Fast Free Server (Pollinations)":
                         if uploaded_image_b64:
                             st.warning("⚠️ Pollinations එන්ජිමෙන් ෆොටෝ එඩිට් කරන්න බැහැ. අපි ඔයාගේ වචන වලින් විතරක් ෆොටෝ එක හදනවා.")
