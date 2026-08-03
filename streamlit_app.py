@@ -34,7 +34,6 @@ class NativeGeminiCompletions:
         contents = []
         system_text = ""
         
-        # 🔥 පරණ මැසේජ් ඔක්කොම AI එකට මතක හිටින්න හරියටම Format කරන කොටස 🔥
         for m in messages:
             if m["role"] == "system":
                 system_text = m["content"]
@@ -49,7 +48,6 @@ class NativeGeminiCompletions:
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස 🔥
         identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
         
         if system_text:
@@ -72,7 +70,7 @@ class NativeGeminiCompletions:
         try:
             text = res.json()["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError):
-            text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. කරුණාකර නැවත උත්සාහ කරන්න."
+            text = "සමාවෙන්න, මට පිළිතුරක් ලබා දීමට නොහැකි විය. (පද්ධතියේ ආරක්ෂක වාරණයක් හෝ දෝෂයක් විය හැක)."
             
         return [MockResponse(text)] if stream else MockResponse(text)
 
@@ -103,7 +101,7 @@ except KeyError:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript (Safe Hunter) 🔥 ---
+# --- 🔥 Manage App මකා දැමීමේ ආරක්ෂිත JavaScript 🔥 ---
 components.html(
     """
     <script>
@@ -301,7 +299,7 @@ if "logged_in" not in st.session_state:
     st.session_state.user_email = ""
     st.session_state.user_role = 0 
     st.session_state.saved_api_key = ""
-    st.session_state.colab_url = "https://reviving-language-uplifting.ngrok-free.dev" # 🔥 ඔයාගේ අලුත් ලින්ක් එක 🔥
+    st.session_state.colab_url = "https://reviving-language-uplifting.ngrok-free.dev"
 
 # =====================================================================================================
 # 🚪 --- UI: පිවිසුම් ද්වාරය --- 🚪
@@ -625,10 +623,8 @@ def sanitize_text(text):
 
 # 🔥 Google Colab Image Generation Function එක 🔥
 def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False):
-    # Colab API URL එක හරියටම ෆෝමැට් කරනවා
     url = colab_base_url.rstrip("/") + "/generate"
     
-    # NSFW On නම් ඒකට අදාල ටැග් ටිකතු කරනවා, නැත්නම් සාමාන්‍ය විදිහට.
     neg_prompt = "ugly, bad quality, blurry, deformed, poorly drawn, extra limbs"
     if is_nsfw:
         prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo, realistic"
@@ -668,13 +664,16 @@ with tab_chat:
         st.markdown("---")
         voice_file = st.audio_input("🎙️ සිංහලෙන් කතා කරලා අහන්න")
 
-    # 🔥 අලුතින් එකතු කළ Toggles දෙක (Image Mode & NSFW) 🔥
     st.markdown("<br>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
+    
+    # 🔥 අලුතින් එකතු කළ Auto Translate Toggle එක 🔥
+    col1, col2, col3 = st.columns(3)
     with col1:
         gen_image_toggle = st.toggle("🎨 ඡායාරූපයක් සාදන්න")
     with col2:
         nsfw_toggle = st.toggle("🔞 NSFW සක්‍රීය කරන්න", disabled=not gen_image_toggle)
+    with col3:
+        auto_prompt_toggle = st.toggle("🔤 Auto Translate", value=True, disabled=not gen_image_toggle)
     
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
         attachments = []
@@ -708,38 +707,62 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # 🔥 Image Mode ඔන් කරලා නම් ඔයාගේ Colab සර්වර් එකෙන් ෆොටෝ එක හදනවා 🔥
+        # 🔥 Auto Prompt & Image Generation Logic 🔥
         if gen_image_toggle:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                message_placeholder.markdown("🎨 *ඔබගේ Colab සර්වර් එක හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (කරුණාකර රැඳී සිටින්න)*")
                 
-                # Colab එකට Request එක යවනවා
-                img_bytes = generate_image_colab(prompt.strip(), st.session_state.colab_url, is_nsfw=nsfw_toggle)
-                
-                if img_bytes:
-                    try:
-                        b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                        full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය Colab සර්වර් එකෙන් සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
+                try:
+                    english_prompt = prompt.strip() # Default: User's exact input
+                    
+                    if auto_prompt_toggle:
+                        message_placeholder.markdown("🔄 *ඔබගේ අදහස තේරුම් ගනිමින් පවතී...*")
                         
-                        message_placeholder.empty()
-                        st.markdown(full_response)
-                        st.image(img_bytes)
+                        # 1. සිංහල අදහස ඉංග්‍රීසි Prompt එකකට හැරවීම (Gemini හරහා)
+                        clean_key = st.session_state.saved_api_key.strip()
+                        prompt_maker = NativeGeminiCompletions(clean_key)
                         
-                        model_msg = {
-                            "role": "model", 
-                            "content": full_response,
-                            "attachments": [{"name": "colab_gen.jpg", "type": "image/jpeg", "data": b64_img}]
-                        }
+                        translation_sys_prompt = "You are an expert Stable Diffusion prompt crafter. The user will provide a description in Sinhala, Singlish, or a mix of languages. Translate and enhance this description into a highly detailed, descriptive, comma-separated English prompt suitable for AI image generation. Return ONLY the English prompt string. Do not include any conversational text, explanations, or quotes."
+                        
+                        temp_msg = [{"role": "user", "content": f"{translation_sys_prompt}\n\nUser Input: {prompt.strip()}"}]
+                        
+                        try:
+                            res_translation = prompt_maker.create(model, temp_msg, stream=False)
+                            english_prompt = res_translation.choices[0].delta.content.strip()
+                        except Exception as translation_error:
+                            english_prompt = prompt.strip() # පරිවර්තනය අසාර්ථක වුවහොත් මුල් Prompt එකම යවයි.
+                            
+                    message_placeholder.markdown(f"🎨 *Colab සර්වර් එක හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී...*\n\n*(💡 Prompt: {english_prompt})*")
+                    
+                    # 2. අලුත් ඉංග්‍රීසි Prompt එක Colab සර්වර් එකට යැවීම
+                    img_bytes = generate_image_colab(english_prompt, st.session_state.colab_url, is_nsfw=nsfw_toggle)
+                    
+                    if img_bytes:
+                        try:
+                            b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                            full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා!\n\n*(Prompt: {english_prompt})*"
+                            
+                            message_placeholder.empty()
+                            st.markdown(full_response)
+                            st.image(img_bytes)
+                            
+                            model_msg = {
+                                "role": "model", 
+                                "content": full_response,
+                                "attachments": [{"name": "colab_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                            }
+                            st.session_state.messages.append(model_msg)
+                        except Exception as e:
+                            message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
+                            model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
+                            st.session_state.messages.append(model_msg)
+                    else:
+                        message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. කරුණාකර Colab සර්වර් එක ධාවනය වේදැයි පරීක්ෂා කරන්න.")
+                        model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Colab සර්වර් එක Off වී තිබිය හැක."}
                         st.session_state.messages.append(model_msg)
-                    except Exception as e:
-                        message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
-                        model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
-                        st.session_state.messages.append(model_msg)
-                else:
-                    message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. කරුණාකර Colab සර්වර් එක ධාවනය වේදැයි පරීක්ෂා කරන්න.")
-                    model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Colab සර්වර් එක Off වී තිබිය හැක."}
-                    st.session_state.messages.append(model_msg)
+                        
+                except Exception as main_error:
+                    message_placeholder.error(f"තාක්ෂණික දෝෂයක්: {main_error}")
                     
                 save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
                 st.rerun()
