@@ -7,6 +7,7 @@ import uuid
 import base64
 import re
 import time
+import urllib.parse
 from supabase import create_client, Client
 
 # =====================================================================================================
@@ -42,14 +43,13 @@ class NativeGeminiCompletions:
             role = "user" if m["role"] == "user" else "model"
             parts = [{"text": m["content"]}]
             
-            # පරණ ෆොටෝ/වොයිස් තිබ්බොත් ඒවත් AI එකට මතක් කරලා දෙනවා
             if "attachments" in m:
                 for att in m["attachments"]:
                     parts.append({"inline_data": {"mime_type": att["type"], "data": att["data"]}})
                     
             contents.append({"role": role, "parts": parts})
             
-        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස (Identity Prompt) 🔥
+        # 🔥 AI මොළයට දෙන අලුත්ම උපදෙස 🔥
         identity_prompt = "ඔබගේ නම 'Pradeep Hacx AI' වේ. ඔබව නිර්මාණය කළේ 'Pradeep Hacx' නමැති ශ්‍රී ලාංකික මෘදුකාංග ඉංජිනේරුවරයා විසිනි. කවුරුන් හෝ ඔබගේ නිර්මාතෘ ගැන ඇසුවොත් 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි, මාව හැදුවේ Pradeep Hacx කියන සුපිරි බුවා!' යැයි ආඩම්බරයෙන් සහ විනෝදයෙන් සිංහලෙන් පවසන්න. IMPORTANT: You are an AI assistant that MUST strictly reply in the Sinhala language (සිංහල). Never reply in English."
         
         if system_text:
@@ -617,42 +617,17 @@ def sanitize_text(text):
     text = re.sub(r'මාව හැදුවේ Pradeep Hacx( කියන පොර)? නෙවෙ(යි|ි|)', 'මාව හැදුවේ පිටසක්වලයෙක් නෙවෙයි', text, flags=re.IGNORECASE)
     return text
 
-# 🔥 අලුත් AI Horde Image Generation Function එක (NSFW parameter එක සමග) 🔥
-def generate_image_aihorde(prompt_text, is_nsfw=False):
-    url = "https://aihorde.net/api/v2/generate/async"
-    headers = {"apikey": "0000000000"} 
-    payload = {
-        "prompt": prompt_text,
-        "params": {
-            "n": 1,
-            "width": 512,
-            "height": 512,
-            "steps": 25,
-        },
-        "nsfw": is_nsfw,
-        "censor_nsfw": not is_nsfw
-    }
-    
-    try:
-        res = requests.post(url, json=payload, headers=headers).json()
-        job_id = res.get("id")
-        if not job_id: return None
-
-        status_url = f"https://aihorde.net/api/v2/generate/status/{job_id}"
+# 🔥 අලුත් Pollinations.ai Image Generation Function එක (ඉතා වේගවත්) 🔥
+def generate_image_pollinations(prompt_text, is_nsfw=False):
+    # nsfw toggle එක on නම්, prompt එකට පොඩි keywords ටිකක් එකතු කරනවා
+    if is_nsfw:
+        prompt_text += ", (nsfw:1.2), uncensored, highly detailed, raw photo"
         
-        while True:
-            time.sleep(3)
-            status_res = requests.get(status_url).json()
-            if status_res.get("done"):
-                generations = status_res.get("generations", [])
-                if generations:
-                    return generations[0].get("img")
-                break
-            if not status_res.get("is_possible"):
-                break
-    except Exception as e:
-        print("Image generation error:", e)
-    return None
+    safe_prompt = urllib.parse.quote(prompt_text)
+    seed = int(time.time()) # හැමවෙලේම අලුත් ෆොටෝ එකක් එන්න random seed එකක් දානවා
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=512&height=768&nologo=true&seed={seed}"
+    
+    return url
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -713,38 +688,33 @@ with tab_chat:
             st.error("⚠️ කරුණාකර '⚙️ සැකසුම්' Tab එකට ගොස් API Key එක ඇතුලත් කර 'Save' ඔබන්න.")
             st.stop()
 
-        # 🔥 Image Mode ඔන් කරලා නම් ෆොටෝ එක හදනවා 🔥
+        # 🔥 Image Mode ඔන් කරලා නම් ෆොටෝ එක හදනවා (Pollinations හරහා) 🔥
         if gen_image_toggle:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                message_placeholder.markdown("🎨 *AI Horde හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (මෙයට විනාඩියක් පමණ ගත විය හැක)*")
+                message_placeholder.markdown("🎨 *ඡායාරූපය නිර්මාණය කරමින් පවතී... (තත්පර කිහිපයක් රැඳී සිටින්න)*")
                 
-                # nsfw_toggle එකේ status එක generate_image_aihorde එකට යවනවා
-                img_url = generate_image_aihorde(prompt.strip(), is_nsfw=nsfw_toggle)
+                # Pollinations URL එක ගන්නවා
+                img_url = generate_image_pollinations(prompt.strip(), is_nsfw=nsfw_toggle)
                 
-                if img_url:
-                    try:
-                        img_bytes = requests.get(img_url).content
-                        b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                        full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
-                        
-                        message_placeholder.empty()
-                        st.markdown(full_response)
-                        st.image(img_bytes)
-                        
-                        model_msg = {
-                            "role": "model", 
-                            "content": full_response,
-                            "attachments": [{"name": "ai_horde_gen.webp", "type": "image/webp", "data": b64_img}]
-                        }
-                        st.session_state.messages.append(model_msg)
-                    except Exception as e:
-                        message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
-                        model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
-                        st.session_state.messages.append(model_msg)
-                else:
-                    message_placeholder.error("⚠️ ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය. Server කාර්යබහුල විය හැක.")
-                    model_msg = {"role": "model", "content": "සමාවෙන්න, ඡායාරූපය නිර්මාණය කිරීමට නොහැකි විය."}
+                try:
+                    img_bytes = requests.get(img_url).content
+                    b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                    full_response = f"✅ ඔබ ඉල්ලූ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Prompt: {prompt.strip()})"
+                    
+                    message_placeholder.empty()
+                    st.markdown(full_response)
+                    st.image(img_bytes)
+                    
+                    model_msg = {
+                        "role": "model", 
+                        "content": full_response,
+                        "attachments": [{"name": "ai_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                    }
+                    st.session_state.messages.append(model_msg)
+                except Exception as e:
+                    message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
+                    model_msg = {"role": "model", "content": "ඡායාරූපය නිර්මාණය කළ නමුත් එය පෙන්වීමේදී දෝෂයක් ඇති විය."}
                     st.session_state.messages.append(model_msg)
                     
                 save_chat(st.session_state.user_email, st.session_state.current_chat_id, st.session_state.messages)
