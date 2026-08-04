@@ -803,7 +803,7 @@ with tab_chat:
                                 }
                                 st.session_state.messages.append(model_msg)
                             else:
-                                message_placeholder.error("⚠️ Mage Bot එකෙන් ඡායාරූපය ලබා ගැනීමට නොහැකි විය. magespace.py කේතය පරීක්ෂා කරන්න.")
+                                message_placeholder.error("⚠️ Mage Bot එකෙන් ඡායාරූපය ලබා ගැනීමට නොහැකි විය. Cloudflare වැනි ආරක්ෂක පද්ධතියකින් අවහිර වී තිබිය හැක.")
                         except Exception as e:
                             message_placeholder.error(f"දෝෂයක්: {e}")
                     
