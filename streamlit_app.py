@@ -500,7 +500,6 @@ if tab_support is not None:
                     if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
                     for target in targets:
                         add_notification(target, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
-                    st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
                     st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
@@ -635,7 +634,6 @@ def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_
         "strength": 0.65 
     }
     
-    # 🔥 Ngrok Warning එක බ්ලොක් නොවී Bypass කරන්න මේ Header එක අනිවාර්යයි! 🔥
     headers = {
         "Content-Type": "application/json",
         "ngrok-skip-browser-warning": "69420"
@@ -660,6 +658,34 @@ def generate_image_pollinations(prompt_text, is_nsfw=False):
     seed = int(time.time())
     url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=512&height=768&nologo=true&seed={seed}"
     return url
+
+# 🔥 Mage.space Bot Image Generation Skeleton (Selenium) 🔥
+def generate_image_magespace_bot(prompt_text, is_nsfw=False, init_image_b64=None):
+    """
+    මෙම කොටස ක්‍රියාත්මක වීමට නම්, Streamlit Cloud හි packages.txt ගොනුවක් සෑදිය යුතුය.
+    (අඩංගු විය යුතු දේ: chromium, chromium-driver)
+    """
+    try:
+        # මෙතනට ඔයාගේ magespace.py එකේ තියෙන selenium bot කේතය සම්බන්ධ කළ හැක.
+        # දැනට අපි User ට තේරුම් ගන්න Message එකක් එක්ක structure එක හදලා තියෙනවා.
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        
+        # 💡 මෙතනින් පහළට ඔයාගේ Bot ගේ Logic එක එන්න ඕනේ (Login, Type prompt, Download image)
+        # driver = webdriver.Chrome(options=chrome_options)
+        # driver.get("https://www.mage.space/")
+        # ... (Bot Logic) ...
+        # driver.quit()
+        
+        return None # දැනට Bot Logic එක සම්පූර්ණ නැති නිසා None යවයි
+    except Exception as e:
+        print(f"Mage Bot Error: {e}")
+        return None
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -691,8 +717,9 @@ with tab_chat:
     with col3:
         auto_prompt_toggle = st.toggle("🔤 Translate", value=True, disabled=not gen_image_toggle)
         
+    # 🔥 අලුත් "Mage.space (High Quality Bot)" ඔප්ෂන් එක එකතු කළා! 🔥
     image_engine = st.selectbox("⚙️ ඡායාරූප එන්ජිම තෝරන්න:", 
-                                ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)"], 
+                                ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)", "Mage.space (High Quality Bot)"], 
                                 disabled=not gen_image_toggle)
     
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
@@ -776,6 +803,31 @@ with tab_chat:
                             st.session_state.messages.append(model_msg)
                         except Exception as e:
                             message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
+                    
+                    elif image_engine == "Mage.space (High Quality Bot)":
+                        message_placeholder.markdown(f"🤖 *Mage.space Bot හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (මේකට ටිකක් වෙලා යයි)*\n\n*(💡 Prompt: {english_prompt})*")
+                        
+                        # Bot function එක call කරනවා
+                        img_bytes = generate_image_magespace_bot(english_prompt, is_nsfw=nsfw_toggle, init_image_b64=uploaded_image_b64)
+                        
+                        if img_bytes:
+                            try:
+                                b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                                full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Mage Bot)\n\n*(Prompt: {english_prompt})*"
+                                message_placeholder.empty()
+                                st.markdown(full_response)
+                                st.image(img_bytes)
+                                model_msg = {
+                                    "role": "model", 
+                                    "content": full_response,
+                                    "attachments": [{"name": "mage_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                                }
+                                st.session_state.messages.append(model_msg)
+                            except Exception as e:
+                                message_placeholder.error(f"ඡායාරූපය පෙන්වීමේදී දෝෂයක්: {e}")
+                        else:
+                            # දැනට Bot කෝඩ් එක සම්පූර්ණ නැති නිසා Warning එකක් දෙනවා
+                            message_placeholder.error("⚠️ Mage Bot එක දැනට ක්‍රියාත්මක වීමට සූදානම් නැත. කරුණාකර Streamlit Cloud හි 'packages.txt' සාදා ඔබේ Bot කේතය (Selenium Script) ඇතුලත් කරන්න. දැනට වෙනත් Engine එකක් තෝරන්න.")
                     
                     elif image_engine == "Google Colab (High Quality & Edit)":
                         mode_msg = "ඡායාරූපය වෙනස් කරමින් පවතී (Img2Img)" if uploaded_image_b64 else "ඡායාරූපය නිර්මාණය කරමින් පවතී"
