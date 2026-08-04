@@ -635,8 +635,14 @@ def generate_image_colab(prompt_text, colab_base_url, is_nsfw=False, init_image_
         "strength": 0.65 
     }
     
+    # 🔥 Ngrok Warning එක බ්ලොක් නොවී Bypass කරන්න මේ Header එක අනිවාර්යයි! 🔥
+    headers = {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "69420"
+    }
+    
     try:
-        res = requests.post(url, json=payload, timeout=120)
+        res = requests.post(url, json=payload, headers=headers, timeout=120)
         if res.status_code == 200:
             return res.content
         else:
@@ -676,7 +682,7 @@ with tab_chat:
 
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🔥 අලුතින් එකතු කළ Toggles සහ Dropdown Menu එක 🔥
+    # 🔥 Toggles සහ Dropdown Menu එක 🔥
     col1, col2, col3 = st.columns(3)
     with col1:
         gen_image_toggle = st.toggle("🎨 ඡායාරූපයක් සාදන්න")
