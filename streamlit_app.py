@@ -500,6 +500,7 @@ if tab_support is not None:
                     if ADMIN_EMAIL not in targets: targets.append(ADMIN_EMAIL)
                     for target in targets:
                         add_notification(target, f"💬 Message from {st.session_state.user_email}:\n{user_message}")
+                    st.toast("✅ පණිවිඩය ඇඩ්මින්ට යැව්වා!", icon="🚀")
                     st.success("✅ ඔබගේ පණිවිඩය ඇඩ්මින් වෙත සාර්ථකව යවන ලදී!")
                 else:
                     st.warning("⚠️ කරුණාකර පණිවිඩයක් ලියන්න.")
@@ -659,45 +660,25 @@ def generate_image_pollinations(prompt_text, is_nsfw=False):
     url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=512&height=768&nologo=true&seed={seed}"
     return url
 
-# 🔥 Mage.space Bot Image Generation (ඔයාගේ Bot කෝඩ් එක දැන් ඇතුලෙම තියෙනවා!) 🔥
-def generate_image_magespace_bot_internal(prompt_text, is_nsfw=False, init_image_b64=None):
+# 🔥 The Magic API (Mage.space Quality without the Bot hassle - FLUX Ultra) 🔥
+def generate_image_magic_api(prompt_text, is_nsfw=False):
+    if is_nsfw:
+        prompt_text += ", (nsfw:1.2), uncensored, highly detailed, realistic, ultra 8k"
+    else:
+        prompt_text += ", highly detailed, realistic, masterpiece, 8k resolution"
+        
+    safe_prompt = urllib.parse.quote(prompt_text)
+    seed = int(time.time())
+    # FLUX එන්ජිම (SDXL වලට වඩා Quality එකින් වැඩි) භාවිතා වේ
+    url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&model=flux&nologo=true&seed={seed}"
+    
     try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.keys import Keys
-        
-        chrome_options = Options()
-        chrome_options.add_argument('--headless=new')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36")
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.get("https://www.mage.space/")
-        time.sleep(5)
-        
-        element = driver.find_element(By.ID, "search-bar")
-        element.send_keys(prompt_text)
-        element.send_keys(Keys.ENTER)
-        
-        time.sleep(15) 
-        
-        elementer = driver.find_elements(By.XPATH,"//img[contains(@class, 'mantine-Image-image')]")
-        if elementer:
-            img_url = elementer[-1].get_attribute("src")
-            img_bytes = requests.get(img_url).content
-            driver.quit()
-            return img_bytes
-            
-        driver.quit()
-        return None
-    except ImportError:
-        raise Exception("කරුණාකර Github හි 'requirements.txt' ගොනුවට 'selenium' යන වචනය එක් කරන්න.")
+        res = requests.get(url, timeout=60)
+        if res.status_code == 200:
+            return res.content
     except Exception as e:
-        print(f"Mage Bot Error: {e}")
-        return None
+        print(f"Magic API Error: {e}")
+    return None
 
 with tab_chat:
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
@@ -729,8 +710,9 @@ with tab_chat:
     with col3:
         auto_prompt_toggle = st.toggle("🔤 Translate", value=True, disabled=not gen_image_toggle)
         
+    # 🔥 අලුත් "Mage.space Alternative (Ultra Quality Magic)" ඔප්ෂන් එක එකතු කළා! 🔥
     image_engine = st.selectbox("⚙️ ඡායාරූප එන්ජිම තෝරන්න:", 
-                                ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)", "Mage.space (High Quality Bot)"], 
+                                ["Google Colab (High Quality & Edit)", "Fast Free Server (Pollinations)", "Mage.space Alternative (Ultra Quality Magic)"], 
                                 disabled=not gen_image_toggle)
     
     if prompt := st.chat_input("මොනවා හරි අහන්න... (Voice එකක් යැව්වොත් යවන්න තිතක් '.' තියන්න)"):
@@ -815,27 +797,30 @@ with tab_chat:
                         except Exception as e:
                             message_placeholder.error(f"ඡායාරූපය බාගත කිරීමේදී දෝෂයක්: {e}")
                     
-                    elif image_engine == "Mage.space (High Quality Bot)":
-                        message_placeholder.markdown(f"🤖 *Mage.space Bot හරහා ඡායාරූපය නිර්මාණය කරමින් පවතී... (මේකට ටිකක් වෙලා යයි)*\n\n*(💡 Prompt: {english_prompt})*")
+                    elif image_engine == "Mage.space Alternative (Ultra Quality Magic)":
+                        if uploaded_image_b64:
+                            st.warning("⚠️ මැජික් API එකෙන් ෆොටෝ එඩිට් කරන්න බැහැ. අපි ඔයාගේ වචන වලින් විතරක් ෆොටෝ එක හදනවා.")
+                            
+                        message_placeholder.markdown(f"🪄 *මැජික් එක ක්‍රියාත්මක වෙමින් පවතී... (FLUX Ultra Quality API)*\n\n*(💡 Prompt: {english_prompt})*")
                         
                         try:
-                            # 🔥 අලුත් ඇතුලත තියෙන Bot function එක call කරනවා 🔥
-                            img_bytes = generate_image_magespace_bot_internal(english_prompt, is_nsfw=nsfw_toggle, init_image_b64=uploaded_image_b64)
+                            # 🔥 මැජික් ෆන්ක්ෂන් එක Call කරනවා 🔥
+                            img_bytes = generate_image_magic_api(english_prompt, is_nsfw=nsfw_toggle)
                             
                             if img_bytes:
                                 b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                                full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Mage Bot)\n\n*(Prompt: {english_prompt})*"
+                                full_response = f"✅ ඡායාරූපය සාර්ථකව නිර්මාණය කළා! (Magic API)\n\n*(Prompt: {english_prompt})*"
                                 message_placeholder.empty()
                                 st.markdown(full_response)
                                 st.image(img_bytes)
                                 model_msg = {
                                     "role": "model", 
                                     "content": full_response,
-                                    "attachments": [{"name": "mage_gen.jpg", "type": "image/jpeg", "data": b64_img}]
+                                    "attachments": [{"name": "magic_gen.jpg", "type": "image/jpeg", "data": b64_img}]
                                 }
                                 st.session_state.messages.append(model_msg)
                             else:
-                                message_placeholder.error("⚠️ Mage Bot එකෙන් ඡායාරූපය ලබා ගැනීමට නොහැකි විය. Cloudflare වැනි ආරක්ෂක පද්ධතියකින් අවහිර වී තිබිය හැක.")
+                                message_placeholder.error("⚠️ මැජික් API එකෙන් ඡායාරූපය ලබා ගැනීමට නොහැකි විය.")
                         except Exception as e:
                             message_placeholder.error(f"දෝෂයක්: {e}")
                     
